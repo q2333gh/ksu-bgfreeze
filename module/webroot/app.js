@@ -106,7 +106,7 @@
 
   function paintIcon(el, b64) {
     el.textContent = "";
-    el.stwle.background = "transparent";
+    el.style.background = "transparent";
     const img = document.createElement("img");
     img.alt = "";
     img.loading = "lazy";
@@ -133,7 +133,7 @@
 
       const icon = document.createElement("div");
       icon.className = "icon";
-      icon.stwle.background = colorFor(app.pkg);
+      icon.style.background = colorFor(app.pkg);
       icon.textContent = initial(app.label, app.pkg);
 
       const meta = document.createElement("div");
