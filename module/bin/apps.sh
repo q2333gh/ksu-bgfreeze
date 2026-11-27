@@ -1,25 +1,32 @@
 #!/system/bin/sh
-# WebUI helpers: list | get-blacklist | set-blacklist | icon <pkg> | restart
+# WebUI helpers: list | get-blacklist | set-blacklist | icon <pkg> | restart | refresh-labels
 DIR=/data/adb/ksu-bgfreeze
 MODDIR="${MODDIR:-/data/adb/modules/ksu-bgfreeze}"
 LIST=$DIR/blacklist.txt
 ICONDIR=$DIR/icons
 LABELCACHE=$DIR/labels.cache
+PKGFILE=$DIR/pkgs.tmp
 mkdir -p "$DIR" "$ICONDIR"
 
 cmd=${1:-list}
 
 kill_daemon() {
   pidf=$DIR/daemon.pid
-  [ -f "$pidf" ] && kill "$(cat "$pidf")" 2>/dev/null
-  # stray instances (old double-start)
-  for st in /proc/[0-9]*/cmdline; do
-    [ -f "$st" ] || continue
-    if tr '\0' ' ' < "$st" 2>/dev/null | grep -q 'bgfreeze-daemon\.sh'; then
-      pid=${st#/proc/}; pid=${pid%/cmdline}
-      kill "$pid" 2>/dev/null
-    fi
-  done
+  if [ -f "$pidf" ]; then
+    kill "$(cat "$pidf")" 2>/dev/null
+  fi
+  # Prefer pkill when present (avoids scanning all /proc)
+  if command -v pkill >/dev/null 2>&1; then
+    pkill -f 'bgfreeze-daemon\.sh' 2>/dev/null
+  else
+    for st in /proc/[0-9]*/cmdline; do
+      [ -f "$st" ] || continue
+      if tr '\0' ' ' < "$st" 2>/dev/null | grep -q 'bgfreeze-daemon\.sh'; then
+        pid=${st#/proc/}; pid=${pid%/cmdline}
+        kill "$pid" 2>/dev/null
+      fi
+    done
+  fi
   rm -f "$pidf"
 }
 
@@ -29,80 +36,71 @@ start_daemon() {
   fi
 }
 
-# One dumpsys package → labels.cache (pkg<TAB>label). Prefer zh labels.
+# Build labels.cache using aapt if available (Android 14+ dumpsys has no application-label).
+# Falls back to empty cache (list will show package names).
 refresh_label_cache() {
-  dump=$DIR/packages.dump
-  # Full dumpsys once (~1–3s) beats per-app dumpsys (~20s+).
-  dumpsys package > "$dump" 2>/dev/null || { rm -f "$dump"; return 1; }
-  awk '
-    function take_label(line) {
-      sub(/^[^:]*:/, "", line)
-      gsub(/\r/, "", line)
-      gsub(/^\047+/, "", line)
-      gsub(/\047+$/, "", line)
-      gsub(/^[ \t]+/, "", line)
-      gsub(/[ \t]+$/, "", line)
-      return line
-    }
-    /Package \[/ {
-      if (pkg != "" && label != "") print pkg "\t" label
-      pkg = ""; label = ""
-      s = index($0, "[")
-      e = index($0, "]")
-      if (s > 0 && e > s) pkg = substr($0, s + 1, e - s - 1)
-      next
-    }
-    pkg == "" { next }
-    /application-label-zh-CN:/ {
-      t = take_label($0)
-      if (t != "") label = t
-      next
-    }
-    /application-label-zh:/ {
-      if (label == "") {
-        t = take_label($0)
-        if (t != "") label = t
-      }
-      next
-    }
-    /application-label:/ {
-      if (label == "") {
-        t = take_label($0)
-        if (t != "") label = t
-      }
-      next
-    }
-    END {
-      if (pkg != "" && label != "") print pkg "\t" label
-    }
-  ' "$dump" > "$LABELCACHE.tmp" && mv "$LABELCACHE.tmp" "$LABELCACHE"
-  rm -f "$dump"
-}
+  aapt=
+  for c in "$MODDIR/bin/aapt" /data/data/com.termux/files/usr/bin/aapt "$(command -v aapt 2>/dev/null)"; do
+    [ -n "$c" ] && [ -x "$c" ] && { aapt=$c; break; }
+  done
 
-list_apps() {
-  # Refresh cache if missing or older than 24h (or FORCE_LABEL_REFRESH=1).
-  need=1
-  if [ -f "$LABELCACHE" ] && [ "${FORCE_LABEL_REFRESH:-0}" != "1" ]; then
-    # toybox/busybox stat -c %Y; fall back to always refresh if unknown
-    now=$(date +%s)
-    mtime=$(stat -c %Y "$LABELCACHE" 2>/dev/null || echo 0)
-    age=$((now - mtime))
-    [ "$mtime" -gt 0 ] && [ "$age" -lt 86400 ] && need=0
-  fi
-  if [ "$need" = 1 ]; then
-    refresh_label_cache || true
-  fi
-
+  : > "$LABELCACHE.tmp"
   pm list packages -3 2>/dev/null | sed 's/^package://' | while read -r pkg; do
     [ -n "$pkg" ] || continue
     label=
-    if [ -f "$LABELCACHE" ]; then
-      label=$(awk -F '\t' -v p="$pkg" '$1==p{print $2;exit}' "$LABELCACHE")
+    if [ -n "$aapt" ]; then
+      apk=$(pm path "$pkg" 2>/dev/null | head -1 | cut -d: -f2)
+      if [ -n "$apk" ] && [ -f "$apk" ]; then
+        # Prefer Chinese label lines from badging
+        bad=$("$aapt" dump badging "$apk" 2>/dev/null) || bad=
+        label=$(printf '%s\n' "$bad" | grep "application-label-zh-CN:" | head -1 \
+          | sed "s/.*application-label-zh-CN:'//;s/'.*//")
+        [ -n "$label" ] || label=$(printf '%s\n' "$bad" | grep "application-label-zh:" | head -1 \
+          | sed "s/.*application-label-zh:'//;s/'.*//")
+        [ -n "$label" ] || label=$(printf '%s\n' "$bad" | grep "^application-label:" | head -1 \
+          | sed "s/.*application-label:'//;s/'.*//")
+      fi
     fi
-    [ -n "$label" ] || label=$pkg
+    [ -n "$label" ] || continue
     label=$(printf '%s' "$label" | tr '\t\n|' '   ')
-    printf '%s\t%s\n' "$pkg" "$label"
+    printf '%s\t%s\n' "$pkg" "$label" >> "$LABELCACHE.tmp"
   done
+
+  if [ -s "$LABELCACHE.tmp" ]; then
+    mv "$LABELCACHE.tmp" "$LABELCACHE"
+  else
+    rm -f "$LABELCACHE.tmp"
+    # Keep empty marker with size 0 invalid — list treats non-size cache as missing
+    rm -f "$LABELCACHE"
+    return 1
+  fi
+}
+
+list_apps() {
+  pm list packages -3 2>/dev/null | sed 's/^package://' | sort -u > "$PKGFILE"
+
+  # One-shot join — never spawn awk/tr per package (that alone was ~4s).
+  if [ -s "$LABELCACHE" ]; then
+    awk -F '\t' '
+      FNR==NR {
+        if (NF >= 2 && $1 != "") {
+          lab = $2
+          for (i = 3; i <= NF; i++) lab = lab "\t" $i
+          gsub(/[\t\n|]/, " ", lab)
+          l[$1] = lab
+        }
+        next
+      }
+      {
+        p = $1
+        lab = l[p]
+        if (lab == "") lab = p
+        print p "\t" lab
+      }
+    ' "$LABELCACHE" "$PKGFILE"
+  else
+    awk '{ print $1 "\t" $1 }' "$PKGFILE"
+  fi
 }
 
 get_blacklist() {
@@ -148,7 +146,6 @@ extract_icon() {
     case "$f" in *webp*|*.xml) continue ;; esac
     unzip -p "$apk" "$f" > "$out" 2>/dev/null || continue
     [ -s "$out" ] || { rm -f "$out"; continue; }
-    # PNG magic bytes
     h=$(od -An -N8 -tx1 "$out" 2>/dev/null | tr -d ' \n')
     case "$h" in
       89504e470d0a1a0a*) ok=1; break ;;
@@ -162,7 +159,6 @@ extract_icon() {
 case "$cmd" in
   list) list_apps ;;
   refresh-labels)
-    FORCE_LABEL_REFRESH=1
     refresh_label_cache && echo OK || echo FAIL
     ;;
   get-blacklist) get_blacklist ;;

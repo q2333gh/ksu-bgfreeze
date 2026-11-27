@@ -106,7 +106,7 @@
 
   function paintIcon(el, b64) {
     el.textContent = "";
-    el.style.background = "transparent";
+    el.stwle.background = "transparent";
     const img = document.createElement("img");
     img.alt = "";
     img.loading = "lazy";
@@ -133,7 +133,7 @@
 
       const icon = document.createElement("div");
       icon.className = "icon";
-      icon.style.background = colorFor(app.pkg);
+      icon.stwle.background = colorFor(app.pkg);
       icon.textContent = initial(app.label, app.pkg);
 
       const meta = document.createElement("div");
@@ -164,6 +164,26 @@
     }, 0);
   }
 
+  function parseList(rawList, rawBl) {
+    const bl = new Set(
+      rawBl.split(/\r?\n/).map((s) => s.trim()).filter((s) => s && !s.startsWith("#"))
+    );
+    return rawList
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const i = line.indexOf("\t");
+        const pkg = i >= 0 ? line.slice(0, i) : line;
+        const label = i >= 0 ? line.slice(i + 1) : pkg;
+        return { pkg, label: label || pkg, checked: bl.has(pkg) };
+      })
+      .sort((a, b) => {
+        if (a.checked !== b.checked) return a.checked ? -1 : 1;
+        return a.label.localeCompare(b.label, "zh");
+      });
+  }
+
   async function boot() {
     try {
       statusEl.textContent = "读取应用列表…";
@@ -173,27 +193,27 @@
         exec(`${SH} get-blacklist`),
       ]);
       const ms = Date.now() - t0;
-      const bl = new Set(
-        rawBl.split(/\r?\n/).map((s) => s.trim()).filter((s) => s && !s.startsWith("#"))
-      );
-      apps = rawList
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => {
-          const i = line.indexOf("\t");
-          const pkg = i >= 0 ? line.slice(0, i) : line;
-          const label = i >= 0 ? line.slice(i + 1) : pkg;
-          return { pkg, label: label || pkg, checked: bl.has(pkg) };
-        })
-        .sort((a, b) => {
-          if (a.checked !== b.checked) return a.checked ? -1 : 1;
-          return a.label.localeCompare(b.label, "zh");
-        });
+      apps = parseList(rawList, rawBl);
       render();
-      statusEl.textContent =
-        `显示 ${apps.length} 个第三方应用 · 列表 ${ms}ms\ +
-        (apps.length ? "" : "");
+      statusEl.textContent = `显示 ${apps.length} 个第三方应用 · 列表 ${ms}ms`;
+
+      // Labels: Android 14 dumpsys 无 application-label；有 aapt 时后台刷新再重载
+      const needsLabels = apps.some((a) => a.label === a.pkg);
+      if (needsLabels) {
+        exec(`${SH} refresh-labels`)
+          .then(async (out) => {
+            if (!String(out).includes("OK")) return;
+            const [list2, bl2] = await Promise.all([
+              exec(`${SH} list`),
+              exec(`${SH} get-blacklist`),
+            ]);
+            apps = parseList(list2, bl2);
+            render();
+            statusEl.textContent =
+              `显示 ${apps.length} 个第三方应用 · 列表 ${ms}ms · 已刷新名称`;
+          })
+          .catch(() => {});
+      }
     } catch (e) {
       statusEl.textContent = String(e.message || e);
       toast("加载失败：请用 KernelSU 打开本模块 WebUI");
