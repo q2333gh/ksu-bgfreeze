@@ -1,6 +1,9 @@
 #!/system/bin/sh
 # Minimal POC: ONLY blacklist packages are frozen when backgrounded.
 # No other apps/system behavior is touched.
+#
+# While frozen, re-assert SIGSTOP every poll so newly spawned
+# processes (e.g. :daemon keep-alives) cannot escape.
 
 MODDIR="${MODDIR:-/data/adb/modules/ksu-bgfreeze}"
 DIR=/data/adb/ksu-bgfreeze
@@ -35,8 +38,24 @@ each_pid() {
   done
 }
 
-freeze_uid() { for p in $(each_pid "$1"); do kill -STOP "$p" 2>/dev/null; done; }
-thaw_uid()   { for p in $(each_pid "$1"); do kill -CONT "$p" 2>/dev/null; done; }
+# STOP every live process of uid; count newly stopped (were not T).
+freeze_uid() {
+  uid=$1
+  n=0
+  for p in $(each_pid "$uid"); do
+    st=$(awk '/^State:/{print $2;exit}' /proc/"$p"/status 2>/dev/null)
+    [ "$st" = "T" ] && continue
+    kill -STOP "$p" 2>/dev/null || continue
+    n=$((n + 1))
+  done
+  echo "$n"
+}
+
+thaw_uid() {
+  for p in $(each_pid "$1"); do
+    kill -CONT "$p" 2>/dev/null
+  done
+}
 
 log "start list=$LIST"
 
@@ -63,11 +82,15 @@ while true; do
     since=$(cat "$DIR/bg.$pkg" 2>/dev/null || echo 0)
     now=$(date +%s)
     [ $((now - since)) -ge "$DELAY" ] || continue
-    [ -f "$DIR/frozen.$pkg" ] && continue
 
-    freeze_uid "$uid"
-    echo 1 > "$DIR/frozen.$pkg"
-    log "freeze $pkg uid=$uid"
+    # First freeze or re-assert: always STOP non-T pids of this uid.
+    added=$(freeze_uid "$uid")
+    if [ ! -f "$DIR/frozen.$pkg" ]; then
+      echo 1 > "$DIR/frozen.$pkg"
+      log "freeze $pkg uid=$uid"
+    elif [ "${added:-0}" -gt 0 ] 2>/dev/null; then
+      log "refreeze $pkg uid=$uid new=$added"
+    fi
   done < "$LIST"
 
   sleep "$POLL"

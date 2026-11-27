@@ -4,21 +4,101 @@ DIR=/data/adb/ksu-bgfreeze
 MODDIR="${MODDIR:-/data/adb/modules/ksu-bgfreeze}"
 LIST=$DIR/blacklist.txt
 ICONDIR=$DIR/icons
+LABELCACHE=$DIR/labels.cache
 mkdir -p "$DIR" "$ICONDIR"
 
 cmd=${1:-list}
 
-label_of() {
-  pkg=$1
-  # prefer Chinese label when present
-  dumpsys package "$pkg" 2>/dev/null | grep -E "application-label(-zh(-CN)?)?:" | head -1 \
-    | sed "s/.*application-label[^:]*://;s/^['\"]//;s/['\"]$//;s/\r//g"
+kill_daemon() {
+  pidf=$DIR/daemon.pid
+  [ -f "$pidf" ] && kill "$(cat "$pidf")" 2>/dev/null
+  # stray instances (old double-start)
+  for st in /proc/[0-9]*/cmdline; do
+    [ -f "$st" ] || continue
+    if tr '\0' ' ' < "$st" 2>/dev/null | grep -q 'bgfreeze-daemon\.sh'; then
+      pid=${st#/proc/}; pid=${pid%/cmdline}
+      kill "$pid" 2>/dev/null
+    fi
+  done
+  rm -f "$pidf"
+}
+
+start_daemon() {
+  if [ -x "$MODDIR/bin/bgfreeze-daemon.sh" ]; then
+    "$MODDIR/bin/bgfreeze-daemon.sh" &
+  fi
+}
+
+# One dumpsys package → labels.cache (pkg<TAB>label). Prefer zh labels.
+refresh_label_cache() {
+  dump=$DIR/packages.dump
+  # Full dumpsys once (~1–3s) beats per-app dumpsys (~20s+).
+  dumpsys package > "$dump" 2>/dev/null || { rm -f "$dump"; return 1; }
+  awk '
+    function take_label(line) {
+      sub(/^[^:]*:/, "", line)
+      gsub(/\r/, "", line)
+      gsub(/^\047+/, "", line)
+      gsub(/\047+$/, "", line)
+      gsub(/^[ \t]+/, "", line)
+      gsub(/[ \t]+$/, "", line)
+      return line
+    }
+    /Package \[/ {
+      if (pkg != "" && label != "") print pkg "\t" label
+      pkg = ""; label = ""
+      s = index($0, "[")
+      e = index($0, "]")
+      if (s > 0 && e > s) pkg = substr($0, s + 1, e - s - 1)
+      next
+    }
+    pkg == "" { next }
+    /application-label-zh-CN:/ {
+      t = take_label($0)
+      if (t != "") label = t
+      next
+    }
+    /application-label-zh:/ {
+      if (label == "") {
+        t = take_label($0)
+        if (t != "") label = t
+      }
+      next
+    }
+    /application-label:/ {
+      if (label == "") {
+        t = take_label($0)
+        if (t != "") label = t
+      }
+      next
+    }
+    END {
+      if (pkg != "" && label != "") print pkg "\t" label
+    }
+  ' "$dump" > "$LABELCACHE.tmp" && mv "$LABELCACHE.tmp" "$LABELCACHE"
+  rm -f "$dump"
 }
 
 list_apps() {
+  # Refresh cache if missing or older than 24h (or FORCE_LABEL_REFRESH=1).
+  need=1
+  if [ -f "$LABELCACHE" ] && [ "${FORCE_LABEL_REFRESH:-0}" != "1" ]; then
+    # toybox/busybox stat -c %Y; fall back to always refresh if unknown
+    now=$(date +%s)
+    mtime=$(stat -c %Y "$LABELCACHE" 2>/dev/null || echo 0)
+    age=$((now - mtime))
+    [ "$mtime" -gt 0 ] && [ "$age" -lt 86400 ] && need=0
+  fi
+  if [ "$need" = 1 ]; then
+    refresh_label_cache || true
+  fi
+
   pm list packages -3 2>/dev/null | sed 's/^package://' | while read -r pkg; do
     [ -n "$pkg" ] || continue
-    label=$(label_of "$pkg")
+    label=
+    if [ -f "$LABELCACHE" ]; then
+      label=$(awk -F '\t' -v p="$pkg" '$1==p{print $2;exit}' "$LABELCACHE")
+    fi
     [ -n "$label" ] || label=$pkg
     label=$(printf '%s' "$label" | tr '\t\n|' '   ')
     printf '%s\t%s\n' "$pkg" "$label"
@@ -45,12 +125,9 @@ set_blacklist() {
     done
   fi
   mv "$tmp" "$LIST"
-  pidf=$DIR/daemon.pid
-  [ -f "$pidf" ] && kill "$(cat "$pidf")" 2>/dev/null
+  kill_daemon
   sleep 1
-  if [ -x "$MODDIR/bin/bgfreeze-daemon.sh" ]; then
-    "$MODDIR/bin/bgfreeze-daemon.sh" &
-  fi
+  start_daemon
   echo OK
 }
 
@@ -84,15 +161,18 @@ extract_icon() {
 
 case "$cmd" in
   list) list_apps ;;
+  refresh-labels)
+    FORCE_LABEL_REFRESH=1
+    refresh_label_cache && echo OK || echo FAIL
+    ;;
   get-blacklist) get_blacklist ;;
   set-blacklist) set_blacklist "$@" ;;
   icon) extract_icon "$2" ;;
   restart)
-    pidf=$DIR/daemon.pid
-    [ -f "$pidf" ] && kill "$(cat "$pidf")" 2>/dev/null
+    kill_daemon
     sleep 1
-    "$MODDIR/bin/bgfreeze-daemon.sh" &
+    start_daemon
     echo OK
     ;;
-  *) echo "usage: apps.sh list|get-blacklist|set-blacklist|icon <pkg>|restart" >&2; exit 1 ;;
+  *) echo "usage: apps.sh list|refresh-labels|get-blacklist|set-blacklist|icon <pkg>|restart" >&2; exit 1 ;;
 esac

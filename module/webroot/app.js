@@ -33,10 +33,8 @@
         else reject(new Error(stderr || stdout || String(errno)));
       };
       try {
-        // KernelSU: exec(cmd, optionsJson, callbackName)
         ksu.exec(cmd, "{}", cb);
       } catch (e) {
-        // some builds: exec(cmd, callbackName)
         try { ksu.exec(cmd, cb); }
         catch (e2) { reject(e2 || e); }
       }
@@ -63,11 +61,69 @@
     countEl.textContent = "已选 " + selectedPkgs().length;
   }
 
+  // Limit concurrent icon extractions — each is a shell + unzip.
+  const ICON_CONCURRENCY = 2;
+  let iconActive = 0;
+  /** @type {{pkg:string,el:HTMLElement}[]} */
+  const iconQueue = [];
+  const iconCache = new Map();
+
+  function pumpIcons() {
+    while (iconActive < ICON_CONCURRENCY && iconQueue.length) {
+      const job = iconQueue.shift();
+      iconActive++;
+      loadIconNow(job.pkg, job.el).finally(() => {
+        iconActive--;
+        pumpIcons();
+      });
+    }
+  }
+
+  function enqueueIcon(pkg, el) {
+    if (iconCache.has(pkg)) {
+      const b64 = iconCache.get(pkg);
+      if (b64) paintIcon(el, b64);
+      return;
+    }
+    iconQueue.push({ pkg, el });
+    pumpIcons();
+  }
+
+  async function loadIconNow(pkg, el) {
+    if (iconCache.has(pkg)) {
+      const b64 = iconCache.get(pkg);
+      if (b64) paintIcon(el, b64);
+      return;
+    }
+    try {
+      const b64 = (await exec(`${SH} icon '${pkg.replace(/'/g, "")}'`)).trim();
+      iconCache.set(pkg, b64 || null);
+      if (b64 && el.isConnected) paintIcon(el, b64);
+    } catch (_) {
+      iconCache.set(pkg, null);
+    }
+  }
+
+  function paintIcon(el, b64) {
+    el.textContent = "";
+    el.style.background = "transparent";
+    const img = document.createElement("img");
+    img.alt = "";
+    img.loading = "lazy";
+    img.src = "data:image/png;base64," + b64;
+    img.onerror = () => {
+      try { el.removeChild(img); } catch (_) {}
+    };
+    el.appendChild(img);
+  }
+
   function render() {
     const q = filter.trim().toLowerCase();
+    iconQueue.length = 0;
     listEl.innerHTML = "";
     const frag = document.createDocumentFragment();
     let n = 0;
+    const iconJobs = [];
     for (const app of apps) {
       if (q && !app.label.toLowerCase().includes(q) && !app.pkg.toLowerCase().includes(q)) continue;
       n++;
@@ -96,50 +152,27 @@
         updateCount();
       });
       frag.appendChild(li);
-
-      // lazy icon
-      loadIcon(app.pkg, icon);
+      iconJobs.push({ pkg: app.pkg, el: icon });
     }
     listEl.appendChild(frag);
     statusEl.textContent = n ? `显示 ${n} / ${apps.length} 个第三方应用` : "无匹配应用";
     updateCount();
-  }
 
-  const iconCache = new Map();
-  async function loadIcon(pkg, el) {
-    if (iconCache.has(pkg)) {
-      const b64 = iconCache.get(pkg);
-      if (b64) paintIcon(el, b64);
-      return;
-    }
-    try {
-      const b64 = (await exec(`${SH} icon '${pkg.replace(/'/g, "")}'`)).trim();
-      iconCache.set(pkg, b64 || null);
-      if (b64) paintIcon(el, b64);
-    } catch (_) {
-      iconCache.set(pkg, null);
-    }
-  }
-
-  function paintIcon(el, b64) {
-    el.textContent = "";
-    el.style.background = "transparent";
-    const img = document.createElement("img");
-    img.alt = "";
-    img.src = "data:image/png;base64," + b64;
-    img.onerror = () => {
-      el.removeChild(img);
-    };
-    el.appendChild(img);
+    // Defer icon fetch so the list paints first.
+    setTimeout(() => {
+      for (const job of iconJobs) enqueueIcon(job.pkg, job.el);
+    }, 0);
   }
 
   async function boot() {
     try {
       statusEl.textContent = "读取应用列表…";
+      const t0 = Date.now();
       const [rawList, rawBl] = await Promise.all([
         exec(`${SH} list`),
         exec(`${SH} get-blacklist`),
       ]);
+      const ms = Date.now() - t0;
       const bl = new Set(
         rawBl.split(/\r?\n/).map((s) => s.trim()).filter((s) => s && !s.startsWith("#"))
       );
@@ -158,6 +191,9 @@
           return a.label.localeCompare(b.label, "zh");
         });
       render();
+      statusEl.textContent =
+        `显示 ${apps.length} 个第三方应用 · 列表 ${ms}ms\ +
+        (apps.length ? "" : "");
     } catch (e) {
       statusEl.textContent = String(e.message || e);
       toast("加载失败：请用 KernelSU 打开本模块 WebUI");
@@ -175,7 +211,6 @@
     applyBtn.textContent = "应用中…";
     try {
       const pkgs = selectedPkgs();
-      // write via printf pipe to avoid arg length limits
       const payload = pkgs.map((p) => p.replace(/'/g, "")).join("\\n");
       const cmd =
         `printf '%b' '${payload}\\n' | ${SH} set-blacklist`;
