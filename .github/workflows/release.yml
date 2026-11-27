@@ -1,0 +1,28 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only precheck, do not publish'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish KernelSU module
+        uses: KernelSU-Modules/tools/actions/module-release@424471eacf6c0bd00e8e3708980f6b1882b5bf33
+        with:
+          module-dir: module
+          release-notes-file: CHANGELOG.md
+          require-immutable: 'true'
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true }}

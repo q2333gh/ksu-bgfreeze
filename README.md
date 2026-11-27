@@ -31,9 +31,23 @@
 - [docs/UX.md](docs/UX.md) — WebUI 交互
 - [docs/FEASIBILITY.md](docs/FEASIBILITY.md) — 可行性说明
 
+## 发版（CI）
+
+推 `v*` tag 即触发官方 `module-release` action，自动预检并以 immutable Release 发 zip：
+
+```bash
+# 先改 module/module.prop 的 version / versionCode，更新 CHANGELOG.md
+git tag v0.3.2
+git push origin v0.3.2
+```
+
+也可在 Actions 里手动跑 `Release`（可勾 dry-run）。`main`/PR 上会跑 `Precheck` dry-run。
+
+本地只打包：`./scripts/pack.sh`
+
 ## 上架 KernelSU Modules（云朵）
 
-本仓库已含 `module.yaml`，并发布 immutable Release。还需在浏览器完成：
+流程复核见 [docs/CLOUD_RELEASE.md](docs/CLOUD_RELEASE.md)。当前：immutable + Check Run 通过，Portal **Pending review**。
 
-1. 安装 App：https://github.com/apps/kernelsu-modules/installations/new  
-2. 门户提交：https://developers.kernelsu.org/
+- App：https://github.com/apps/kernelsu-modules/installations/new  
+- 门户：https://developers.kernelsu.org/

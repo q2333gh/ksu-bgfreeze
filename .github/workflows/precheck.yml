@@ -1,0 +1,22 @@
+name: Precheck
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  precheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dry-run KernelSU module-release validator
+        uses: KernelSU-Modules/tools/actions/module-release@424471eacf6c0bd00e8e3708980f6b1882b5bf33
+        with:
+          module-dir: module
+          dry-run: 'true'
+          tag: precheck
