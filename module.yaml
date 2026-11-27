@@ -1,0 +1,5 @@
+schemaVersion: 1
+id: ksu-bgfreeze
+name: KSU BG Freeze
+summary: 只对黑名单应用做退后台冻结；KernelSU WebUI 勾选管理。
+description: README.md
