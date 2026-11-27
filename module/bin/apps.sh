@@ -164,11 +164,22 @@ case "$cmd" in
   get-blacklist) get_blacklist ;;
   set-blacklist) set_blacklist "$@" ;;
   icon) extract_icon "$2" ;;
+  log|logs)
+    # 简要日志：默认尾 40 行；可传行数 apps.sh log 80
+    n=${2:-40}
+    LOG=/data/local/tmp/ksu-bgfreeze.log
+    if [ -f "$LOG" ]; then
+      echo "=== $LOG (tail $n) ==="
+      tail -n "$n" "$LOG"
+    else
+      echo "no log yet: $LOG"
+    fi
+    ;;
   restart)
     kill_daemon
     sleep 1
     start_daemon
     echo OK
     ;;
-  *) echo "usage: apps.sh list|refresh-labels|get-blacklist|set-blacklist|icon <pkg>|restart" >&2; exit 1 ;;
+  *) echo "usage: apps.sh list|refresh-labels|get-blacklist|set-blacklist|icon <pkg>|log [n]|restart" >&2; exit 1 ;;
 esac
