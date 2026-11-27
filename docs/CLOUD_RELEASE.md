@@ -1,5 +1,7 @@
 # KernelSU 云朵发版流程复核
 
+> Agent 发版请按根目录 [AGENTS.md](../AGENTS.md) 执行；本文是合规台账与背景。
+
 依据：https://developers.kernelsu.org/docs/zh-CN/getting-started  
 https://developers.kernelsu.org/docs/zh-CN/releasing
 

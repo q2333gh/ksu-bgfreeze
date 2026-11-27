@@ -28,6 +28,8 @@
 
 ## 文档
 
+- [AGENTS.md](AGENTS.md) — **给 Agent 的发版/操作手册**
+- [docs/CLOUD_RELEASE.md](docs/CLOUD_RELEASE.md) — 云朵合规台账
 - [docs/UX.md](docs/UX.md) — WebUI 交互
 - [docs/FEASIBILITY.md](docs/FEASIBILITY.md) — 可行性说明
 
