@@ -14,9 +14,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Dry-run KernelSU module-release validator
-        uses: KernelSU-Modules/tools/actions/module-release@424471eacf6c0bd00e8e3708980f6b1882b5bf33
-        with:
-          module-dir: module
-          dry-run: 'true'
-          tag: precheck
+      # 不调用 module-release dry-run：它对已发布的 versionCode 会报
+      # version-not-newer。结构校验留给这里；发版预检留给 Release workflow。
+      - name: Validate module layout and module.yaml
+        run: |
+          set -euo pipefail
+          test -f module.yaml
+          test -f module/module.prop
+          test -f README.md
+          id_prop=$(grep -E '^id=' module/module.prop | head -1 | cut -d= -f2-)
+          id_yaml=$(grep -E '^id:' module.yaml | head -1 | awk '{print $2}')
+          test -n "$id_prop"
+          test "$id_prop" = "$id_yaml"
+          for key in id name version versionCode author description; do
+            grep -qE "^${key}=" module/module.prop
+          done
+          versionCode=$(grep -E '^versionCode=' module/module.prop | head -1 | cut -d= -f2-)
+          test "$versionCode" -ge 1
+          desc=$(grep -E '^description:' module.yaml | head -1 | awk '{print $2}')
+          test -f "$desc"
+          bash scripts/pack.sh
+          ls -la dist/*.zip
+          echo "OK id=$id_prop versionCode=$versionCode"

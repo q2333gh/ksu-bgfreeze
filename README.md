@@ -41,7 +41,7 @@ git tag v0.3.2
 git push origin v0.3.2
 ```
 
-也可在 Actions 里手动跑 `Release`（可勾 dry-run）。`main`/PR 上会跑 `Precheck` dry-run。
+也可在 Actions 里手动跑 `Release`（可勾 dry-run）。`main`/PR 上会跑结构 `Precheck`（打包 + prop/yaml 一致性）。
 
 本地只打包：`./scripts/pack.sh`
 

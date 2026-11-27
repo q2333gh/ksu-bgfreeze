@@ -31,7 +31,7 @@ https://developers.kernelsu.org/docs/zh-CN/releasing
 | 当前稳定 zip immutable | ✅ | `v0.3.1` `immutable:true`，单 zip |
 | ZIP 结构 / module.prop 字段 | ✅ | Sync Check：`v0.3.1 (301) is valid` |
 | `module.yaml` 文档检查 | ✅ | Check：`module.yaml and documents are valid` |
-| 仓库内发版 CI | ✅（本提交补齐） | 此前手工 `gh release`；现已加 workflow |
+| 仓库内发版 CI | ✅ | `Release`：tag → 官方 module-release；`Precheck`：结构/打包 |
 | 已出现在 modules.kernelsu.org | ⏳ | 等人审 |
 
 ## 已知非阻断项
