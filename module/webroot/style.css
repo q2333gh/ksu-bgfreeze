@@ -1,0 +1,96 @@
+:root {
+  --bg: #0f1419;
+  --card: #1a222c;
+  --text: #e8eef4;
+  --muted: #8b9aab;
+  --accent: #3d9cf0;
+  --line: #2a3542;
+  --ok: #3cbe7d;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.4 -apple-system, "Segoe UI", Roboto, "PingFang SC", "Noto Sans SC", sans-serif;
+}
+header { padding: 20px 16px 8px; }
+h1 { margin: 0 0 6px; font-size: 22px; font-weight: 700; }
+.sub { margin: 0; color: var(--muted); font-size: 13px; }
+
+.toolbar { padding: 8px 16px 12px; position: sticky; top: 0; background: var(--bg); z-index: 2; }
+#q {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+}
+#q:focus { border-color: var(--accent); }
+
+.status { padding: 0 16px 8px; color: var(--muted); font-size: 13px; }
+
+.list { list-style: none; margin: 0; padding: 0 8px 96px; }
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  margin: 0 0 6px;
+  background: var(--card);
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+.row.on { border-color: rgba(61, 156, 240, 0.45); }
+.row:active { opacity: 0.92; }
+
+.icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  object-fit: cover; background: #243040; flex: none;
+  display: grid; place-items: center; font-weight: 700; color: #fff; font-size: 16px;
+}
+.icon img { width: 40px; height: 40px; border-radius: 10px; display: block; }
+
+.meta { flex: 1; min-width: 0; }
+.name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pkg { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.check {
+  width: 22px; height: 22px; border-radius: 6px;
+  border: 2px solid var(--muted); flex: none;
+  display: grid; place-items: center;
+}
+.row.on .check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.row.on .check::after {
+  content: "";
+  width: 10px; height: 6px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) translateY(-1px);
+}
+
+footer {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: rgba(15, 20, 25, 0.92);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--line);
+}
+#count { color: var(--muted); }
+#apply {
+  border: 0; border-radius: 12px;
+  background: var(--accent); color: #fff;
+  font-weight: 700; font-size: 15px;
+  padding: 12px 22px;
+}
+#apply:disabled { opacity: 0.5; }
+#apply.busy { background: #2f6fa8; }

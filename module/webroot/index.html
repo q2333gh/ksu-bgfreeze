@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>后台冻结 · 黑名单</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>后台冻结</h1>
+    <p class="sub">只有勾选的应用会在退后台后被冻结。其它应用不受影响。</p>
+  </header>
+
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="搜索名称或包名" autocomplete="off" />
+  </div>
+
+  <div id="status" class="status">加载中…</div>
+  <ul id="list" class="list"></ul>
+
+  <footer>
+    <span id="count">已选 0</span>
+    <button id="apply" type="button">应用</button>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

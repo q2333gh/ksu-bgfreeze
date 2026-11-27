@@ -1,0 +1,3 @@
+# 一行一个包名。只有写在这里的应用才会被冻结。
+# 名单为空 = 什么都不做。
+com.tencent.android.qqdownloader

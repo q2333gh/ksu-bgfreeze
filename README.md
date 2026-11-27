@@ -1,30 +1,39 @@
-# KSU BG Freeze
+# ksu-bgfreeze
 
-只对**黑名单**里的应用做退后台冻结的 KernelSU 模块。非黑名单应用不受影响。
-
-在 KernelSU Manager 的 **WebUI** 里勾选应用、点 Apply 即可管理黑名单（带图标与复选框）。
-
-## 功能
-
-- 黑名单模式：仅冻结你选中的应用
-- WebUI 管理：在模块页直接勾选 / 取消勾选并应用
-- 开机后由 daemon 持续处理退后台场景
+纯 **KernelSU** 模块：只对黑名单里的应用做退后台冻结；名单外零干预。
 
 ## 安装
 
-1. 从 [Releases](https://github.com/q2333gh/ksu-bgfreeze/releases) 下载最新 `.zip`
-2. 在 KernelSU Manager → 模块 → 从本地安装
-3. 重启后打开本模块 WebUI，勾选需要冻结的应用并 Apply
+1. 刷入 Release 里的 zip：  
+   https://github.com/q2333gh/ksu-bgfreeze/releases/latest
+2. 重启
+3. KernelSU → 本模块 → **WebUI** → 勾选应用 → **应用**
 
-上架 [KernelSU Modules](https://modules.kernelsu.org) 云端目录后，也可直接在 Manager 的模块目录中搜索安装（需仓库已启用 **immutable releases** 并完成 Portal 提交）。
+## 行为
 
-## 模块信息
+- 勾选的应用退后台约 3 秒 → `SIGSTOP`
+- 回到前台 → `SIGCONT`
+- 黑名单空 = 空转
 
-| 项 | 值 |
-| --- | --- |
-| id | `ksu-bgfreeze` |
-| 作者 | btwl |
+配置也可手改：`/data/adb/ksu-bgfreeze/blacklist.txt`  
+日志：`/data/local/tmp/ksu-bgfreeze.log`
 
-## 说明
+## 开发
 
-本仓库用于发行与目录元数据（`module.yaml`）。模块 ZIP 以 GitHub Release 资产形式发布；KernelSU Modules **不会**代为托管或接收直接上传的 ZIP，只索引你仓库里的不可变 Release。
+```bash
+./scripts/pack.sh
+```
+
+产出：`dist/ksu-bgfreeze-<version>.zip`
+
+## 文档
+
+- [docs/UX.md](docs/UX.md) — WebUI 交互
+- [docs/FEASIBILITY.md](docs/FEASIBILITY.md) — 可行性说明
+
+## 上架 KernelSU Modules（云朵）
+
+本仓库已含 `module.yaml`，并发布 immutable Release。还需在浏览器完成：
+
+1. 安装 App：https://github.com/apps/kernelsu-modules/installations/new  
+2. 门户提交：https://developers.kernelsu.org/

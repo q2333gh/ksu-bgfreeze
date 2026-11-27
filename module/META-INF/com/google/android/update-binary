@@ -1,0 +1,21 @@
+#!/sbin/sh
+umask 022
+ZIPFILE=$3
+ui_print() { echo "$1"; }
+ui_print "- ksu-bgfreeze"
+TMP=/dev/tmp/ksu-bgfreeze
+rm -rf "$TMP"; mkdir -p "$TMP"
+unzip -o "$ZIPFILE" -d "$TMP" >&2
+MODID=ksu-bgfreeze
+TARGET=/data/adb/modules_update/$MODID
+mkdir -p "$TARGET" 2>/dev/null || TARGET=/data/adb/modules/$MODID
+mkdir -p "$TARGET"
+cp -af "$TMP/module.prop" "$TMP/service.sh" "$TMP/boot-completed.sh" \
+  "$TMP/uninstall.sh" "$TMP/action.sh" "$TMP/skip_mount" "$TARGET/" 2>/dev/null
+cp -af "$TMP/bin" "$TMP/config" "$TMP/webroot" "$TARGET/" 2>/dev/null
+chmod 755 "$TARGET"/*.sh "$TARGET/bin/"*.sh 2>/dev/null
+mkdir -p /data/adb/ksu-bgfreeze
+[ -f /data/adb/ksu-bgfreeze/blacklist.txt ] || cp "$TARGET/config/blacklist.txt" /data/adb/ksu-bgfreeze/
+touch /data/adb/modules/$MODID/update 2>/dev/null
+ui_print "- open WebUI in KernelSU to manage blacklist"
+exit 0
