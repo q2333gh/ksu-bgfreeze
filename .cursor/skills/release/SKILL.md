@@ -48,6 +48,10 @@ gh release view vX.Y.Z -R q2333gh/ksu-bgfreeze --json isImmutable,tagName,assets
 
 Expect `isImmutable: true` and exactly one module zip.
 
+7. OP12 / 机内热更（若要立刻验证）：下载 Release zip →  
+   `sh …/apps.sh hot-update <zip>` → `apps.sh status` 期望 `aligned=1`。  
+   **禁止**只 `cp apps.sh` / `webroot`。见 `scripts/hot-update.sh`、`module/AGENTS.md`。
+
 ## Failure
 
 | 现象 | 处理 |

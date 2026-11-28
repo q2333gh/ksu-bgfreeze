@@ -3,8 +3,8 @@
 
   const MOD = "/data/adb/modules/ksu-bgfreeze";
   const SH = "sh " + MOD + "/bin/apps.sh";
-  const CACHE_KEY = "bgf_snapshot_v5";
-  const UI = "405";
+  const CACHE_KEY = "bgf_snapshot_v6";
+  const UI = "406";
 
   const statusEl = document.getElementById("status");
   const hintEl = document.getElementById("hint");
@@ -457,8 +457,45 @@
     render();
   }
 
+  function parseStatus(raw) {
+    const o = {};
+    String(raw || "")
+      .split(/\r?\n/)
+      .forEach((line) => {
+        const i = line.indexOf("=");
+        if (i > 0) o[line.slice(0, i)] = line.slice(i + 1);
+      });
+    return o;
+  }
+
+  async function checkHealth() {
+    try {
+      const st = parseStatus(await exec(SH + " status", 4000));
+      if (st.aligned === "0") {
+        toast("版本不一致：请用完整 zip hot-update");
+        setStatus(
+          "版本不一致 prop=" +
+            (st.prop || "?") +
+            " binary=" +
+            (st.binary || "?") +
+            " — 勿只热更脚本"
+        );
+        return false;
+      }
+      if (st.disabled === "1" || st.panic === "1") {
+        toast("模块已 panic/disable，daemon 未运行");
+        setStatus("daemon 停用 — 需 enable 或完整 hot-update");
+        return false;
+      }
+      return true;
+    } catch (_) {
+      return true;
+    }
+  }
+
   async function refreshFromDevice() {
     setStatus("读取应用列表…");
+    await checkHealth();
     const t0 = Date.now();
     const raw = await exec(SH + " snapshot", 8000);
     let modeRaw = "stop";

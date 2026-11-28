@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.6
+
+- Safe hot-update: `apps.sh hot-update <zip>` refuses partial packages, atomic install, clears disable/panic, verifies prop==binary
+- `status` health check; WebUI warns on mismatch; `emergency` no longer leaves module disable (`panic` for hard stop)
+- Host helper `scripts/hot-update.sh`
+
 ## v0.6.5
 
 - Systems audit of shell glue: O(1) kill + cmdline check, Binder timeout/cache, safe emergency (no mass pm enable)
