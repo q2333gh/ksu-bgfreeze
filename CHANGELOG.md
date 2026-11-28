@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.0
+
+- Safe-to-enable defaults: empty blacklist = idle (no dumpsys/proc); fg unknown → skip freeze
+- IPC budget (3/poll) + `timeout` on dumpsys/am/pm; binder-fail circuit trip
+- `mode=disable` hard-gated by `allow-disable` file; boot needs both allow files
+- AGENTS: agents must commit/push/CI themselves after code changes
+
 ## v0.5.1
 
 - Industry compare doc; `mode=stop` prefers **cgroup uid freeze** (OP12 `apps/uid_*`), then `/dev/freezer`, then SIGSTOP

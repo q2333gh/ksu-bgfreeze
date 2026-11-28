@@ -18,6 +18,10 @@ pub struct Paths {
     pub log: PathBuf,
     pub circuit: PathBuf,
     pub packages_list: PathBuf,
+    /// Must exist to allow mode=disable at all.
+    pub allow_disable: PathBuf,
+    /// Boot may keep disable mode only if this + allow_disable exist.
+    pub allow_disable_on_boot: PathBuf,
 }
 
 impl Paths {
@@ -37,10 +41,22 @@ impl Paths {
             log: PathBuf::from("/data/local/tmp/ksu-bgfreeze.log"),
             circuit: data.join("circuit.open"),
             packages_list: PathBuf::from("/data/system/packages.list"),
+            allow_disable: data.join("allow-disable"),
+            allow_disable_on_boot: data.join("allow-disable-on-boot"),
             blacklist,
             data,
             moddir,
         }
+    }
+
+    pub fn disable_allowed(&self) -> bool {
+        self.allow_disable.is_file()
+    }
+
+    /// Boot may keep disable only when both allow files exist (service.sh also enforces).
+    #[allow(dead_code)]
+    pub fn boot_disable_allowed(&self) -> bool {
+        self.allow_disable.is_file() && self.allow_disable_on_boot.is_file()
     }
 }
 
@@ -63,7 +79,15 @@ impl Settings {
         let raw = fs::read_to_string(&paths.modefile).unwrap_or_else(|_| "stop".into());
         let m = raw.trim();
         self.mode = match m {
-            "disable" | "tombstone" | "hail" => Mode::Disable,
+            "disable" | "tombstone" | "hail" => {
+                if paths.disable_allowed() {
+                    Mode::Disable
+                } else {
+                    // Hard gate: refuse disable without allow file
+                    let _ = fs::write(&paths.modefile, b"stop\n");
+                    Mode::Stop
+                }
+            }
             _ => Mode::Stop,
         };
         Ok(())

@@ -6,8 +6,8 @@ mkdir -p "$DIR"
 
 [ -f "$MODDIR/disable" ] && exit 0
 
-# Safe boot: force mode=stop unless user opted into disable-on-boot
-if [ ! -f "$DIR/allow-disable-on-boot" ]; then
+# Safe-by-default: always force mode=stop unless BOTH allow files exist
+if [ ! -f "$DIR/allow-disable" ] || [ ! -f "$DIR/allow-disable-on-boot" ]; then
   echo stop > "$DIR/mode"
 fi
 

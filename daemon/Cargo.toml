@@ -1,6 +1,6 @@
 [package]
 name = "bgfreeze"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 description = "KSU bgfreeze daemon — O(T) proc snapshot, fail-fast hail"
 license = "MIT"

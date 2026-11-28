@@ -58,7 +58,10 @@ set_mode() {
   want=$1
   case "$want" in
     disable|tombstone)
-      # Explicit user choice clears circuit breaker
+      if [ ! -f "$DIR/allow-disable" ]; then
+        echo "REFUSE disable: touch $DIR/allow-disable first (dangerous)" >&2
+        return 1
+      fi
       rm -f "$DIR/circuit.open" "$DIR"/fail.*
       echo disable > "$MODEFILE"
       ;;

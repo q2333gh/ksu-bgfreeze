@@ -16,11 +16,11 @@
       <legend>冻结模式</legend>
       <label class="opt">
         <input type="radio" name="mode" id="modeStop" value="stop" checked />
-        <span>SIGSTOP（暂停进程）</span>
+        <span>冻结（cgroup / SIGSTOP，默认安全）</span>
       </label>
       <label class="opt">
         <input type="radio" name="mode" id="modeDisable" value="disable" />
-        <span>Hail 停用（整包 pm disable）</span>
+        <span>Hail 停用（需先 touch allow-disable）</span>
       </label>
       <button type="button" id="btnMode" class="btn">切换模式</button>
     </fieldset>

@@ -15,18 +15,19 @@ WebUI 可选两种冻结模式：
 
 | 模式 | 退后台约 3 秒后 | 再用时 |
 |------|----------------|--------|
-| **SIGSTOP** | `kill -STOP` 暂停进程 | 回前台 `SIGCONT` |
-| **Hail 停用** | `am force-stop` + 整包 `pm disable`（对齐 [Hail](https://github.com/aistra0528/Hail)） | WebUI「解冻」或「打开」（enable + 启动） |
+| **SIGSTOP / cgroup**（默认） | cgroup-uid / freezer / `SIGSTOP` | 回前台解冻 |
+| **Hail 停用**（需门闩） | `am force-stop` + 整包 `pm disable`（对齐 [Hail](https://github.com/aistra0528/Hail)） | WebUI「解冻」或「打开」（enable + 启动） |
 
-停用模式下桌面图标可能消失，这是 PackageManager 整包 disable 的正常表现。  
-黑名单空 = 空转。
+**敢随便开（v0.6）**：空黑名单空转；前台未知不冻；每轮 Binder IPC 配额；`mode=disable` 必须先 `touch /data/adb/ksu-bgfreeze/allow-disable`（开机保留还要 `allow-disable-on-boot`）。
+
+停用模式下桌面图标可能消失，这是 PackageManager 整包 disable 的正常表现。
 
 配置：`/data/adb/ksu-bgfreeze/blacklist.txt` · 模式：`/data/adb/ksu-bgfreeze/mode`（`stop` / `disable`）  
 日志：`/data/local/tmp/ksu-bgfreeze.log`
 
-## 架构（v0.5+）
+## 架构（v0.6+）
 
-- **Rust daemon** `module/bin/bgfreeze`（静态 aarch64 musl）：每轮 **Θ(T)** 扫 `/proc` 一次建 `uid→pids`，黑名单 **Θ(N+P)**；`flock` 单实例；Hail disable fail-fast + circuit。
+- **Rust daemon** `module/bin/bgfreeze`（静态 aarch64）：每轮 **Θ(T)** 扫 `/proc` 一次建 `uid→pids`，黑名单 **Θ(N+P)**；`flock`；IPC budget + disable 门闩；Hail fail-fast + circuit。
 - Shell 仅 `service.sh` / `apps.sh`（WebUI）胶水。
 - Big-O：[`docs/BIG_O_ANALYSIS.md`](docs/BIG_O_ANALYSIS.md)
 

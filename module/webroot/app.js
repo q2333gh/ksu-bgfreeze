@@ -367,8 +367,9 @@
       render();
       toast(next === "disable" ? "已切 Hail 停用" : "已切 SIGSTOP");
     } catch (e) {
-      setStatus(String(e.message || e));
-      toast("切换失败");
+      const msg = String(e.message || e);
+      setStatus(msg);
+      toast(msg.includes("allow-disable") ? "需先 touch allow-disable" : "切换失败");
       syncModeRadios();
     } finally {
       busy = false;

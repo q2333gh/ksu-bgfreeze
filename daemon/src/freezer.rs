@@ -69,6 +69,13 @@ pub fn freeze_uid(backend: Backend, uid: u32, snap: &UidSnap) -> io::Result<usiz
                 return Ok(0);
             }
             write_one(&p, "1")?;
+            // Verify readback — fail-fast if kernel rejected
+            if read_trim(&p)? != "1" {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "cgroup.freeze verify-fail",
+                ));
+            }
             Ok(1)
         }
         Backend::FreezerV1 => {
@@ -97,6 +104,12 @@ pub fn thaw_uid(backend: Backend, uid: u32, snap: &UidSnap) -> io::Result<usize>
                 return Ok(0);
             }
             write_one(&p, "0")?;
+            if read_trim(&p).unwrap_or_default() == "1" {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "cgroup.thaw verify-fail",
+                ));
+            }
             Ok(1)
         }
         Backend::FreezerV1 => {

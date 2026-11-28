@@ -14,6 +14,19 @@
 
 本工作区若是 Origin 镜像，**发版与 Actions 以 GitHub 仓为准**。本机无 `gh` 凭证时，用已授权的 **`daily_env1`** 环境推送到 `q2333gh/ksu-bgfreeze`：该环境**已有可用的 GitHub token / `gh` 登录**，子 Agent 应直接 `gh auth status` 后 `git push` / `gh`，不要再向用户要 token，也不要假设当前 Origin VM shell 能直接 `gh release`。
 
+## 硬约束：改完代码必须自己 commit / push / CI（禁止甩给用户）
+
+任何会改仓库内容的任务，在回复「做完」之前 **Agent 必须自己做完**下面闭环，**不要**只改文件就停、不要等用户提醒 push：
+
+1. **本地校验**：涉及 daemon 则 `scripts/build-daemon.sh`（或 CI 等价 NDK 路径）；`scripts/pack.sh`；必要时 `sh -n` 脚本。
+2. **Commit**：`git add` 相关文件 → 写清说明的 commit message → `git commit`（本仓库允许 Agent 直接提交）。
+3. **Push Origin**：`git push -u origin <当前分支>`（默认 `main`）。失败按退避重试。
+4. **同步 GitHub `q2333gh/ksu-bgfreeze`**：Origin VM 无 `gh` 时，启动 **`daily_env1`** 子 Agent（**已有 gh token**，勿向用户要）把同一 tip 推到 GitHub `main`。
+5. **盯 CI**：确认 GitHub Actions **Precheck**（`ubuntu-latest`）对刚推的 SHA **变绿**；红则 **自己修 → 再 commit/push → 再等绿**，禁止把红构建丢给用户。
+6. **发版**（仅当用户明确要求发版）：另走 immutable Release 流程（升 `versionCode` + tag）；日常改动 **只推 main + Precheck**，不要随便打 tag。
+
+例外：用户明确说「不要提交 / 不要推送」时才跳过。纯问答、只读调查可以不 commit。
+
 ## 硬约束（违反会浪费 versionCode / tag）
 
 1. **只发 immutable Release**。仓库已开 Release immutability；资源一旦发布不可替换、不可删改 zip、tag 不可复用。
@@ -241,6 +254,7 @@ updateJson=https://modules.kernelsu.org/api/v1/modules/ksu-bgfreeze/update.json
 
 - 功能改动：Rust 在 `daemon/`，打包产物 `module/bin/bgfreeze`；胶水/WebUI 在 `module/`；说明在 `README.md` / `docs/`
 - 改进程控制或 Binder 路径时：**先满足「硬约束：系统级编程安全」**，再提交；需要论据或做 review 时打开该节「长手册 / 外链」
-- 保持黑名单-only：名单外零干预
+- 保持黑名单-only：名单外零干预；**`mode=disable` 必须先有 `allow-disable` 文件**
+- 改完必须走「硬约束：改完代码必须自己 commit / push / CI」
 - 发版相关流程变更时，同步更新本文件与 `docs/CLOUD_RELEASE.md`
-- 交叉编译：`bash scripts/build-daemon.sh`（需 aarch64-linux-musl）；CI 在 `ubuntu-latest` 上同样执行
+- 交叉编译：`bash scripts/build-daemon.sh`（本地 musl 或 `ANDROID_NDK_HOME`）；CI 用 NDK on `ubuntu-latest`
