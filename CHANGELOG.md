@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.5
+
+- Systems audit of shell glue: O(1) kill + cmdline check, Binder timeout/cache, safe emergency (no mass pm enable)
+- WebUI UX: single-fire taps, dirty “保存更改”, mode+list one save, busy overlay, cache bust v405
+
 ## v0.6.4
 
 - WebUI: stop walking all `/proc` in kill_daemon (was freezing KernelSU module UI on OP12)

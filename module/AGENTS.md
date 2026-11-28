@@ -13,7 +13,10 @@
 ## Local rules
 
 - WebUI **禁止**每包一次 `dumpsys package`；列表一次 dumpsys + cache；图标并发限流（见 `docs/UX.md` / `docs/PERF_LIST.md`）。
-- **禁止**在 `apps.sh` / `action.sh` 热路径全表扫 `/proc`（8000+ PID 会卡死 KernelSU WebUI）；停 daemon 只用 pidfile + flock。
+- **禁止**在 `apps.sh` / `action.sh` 热路径全表扫 `/proc`；停 daemon：pidfile + `/proc/$pid/cmdline` 身份核对 + flock。
+- Binder：`pm`/`am` 走 `/system/bin/timeout`；`pm list -d` 每操作至多一次（tombstone-lib 缓存）。
+- `emergency` **禁止**对整机所有 disabled 包 `pm enable`；只 revive 本模块 tombstone 标记。
 - `set-mode disable` 无 `allow-disable` 必须拒绝。
 - 开机无 `allow-disable` + `allow-disable-on-boot` 时强制 `mode=stop`（`service.sh`）。
 - 打包从仓库根：`bash scripts/pack.sh`。
+

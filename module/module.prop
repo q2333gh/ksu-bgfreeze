@@ -1,6 +1,6 @@
 id=ksu-bgfreeze
 name=KSU BG Freeze
-version=v0.6.4
-versionCode=604
+version=v0.6.5
+versionCode=605
 author=btwl
 description=Safe-to-enable: IPC budget, disable gated, idle if empty list, cgroup-uid freeze.

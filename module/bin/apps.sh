@@ -1,17 +1,19 @@
 #!/system/bin/sh
-# WebUI helpers — keep list path O(n log n), zero per-app forks on open.
+# WebUI helpers — systems-safe for KernelSU WebView.
+# Rules: O(1) daemon stop; no /proc glob; Binder via timeout + cache; blacklist-only.
 # snapshot | list | get-blacklist | set-blacklist | get-mode | set-mode | thaw-pkg
-# | icon <pkg> | cache-icons | refresh-labels | restart | log
+# | icon <pkg> | cache-icons | refresh-labels | restart | log | emergency
 DIR=/data/adb/ksu-bgfreeze
 MODDIR="${MODDIR:-/data/adb/modules/ksu-bgfreeze}"
 LIST=$DIR/blacklist.txt
 MODEFILE=$DIR/mode
 ICONDIR=$DIR/icons
-# Served by KernelSU WebUI as relative URL icons/<pkg>.png — no ksu.exec per icon.
 WEBICON="$MODDIR/webroot/icons"
 LABELCACHE=$DIR/labels.cache
 PKGFILE=$DIR/pkgs.tmp
 SNAPFILE=$DIR/snapshot.tsv
+PM=/system/bin/pm
+TIMEOUT=/system/bin/timeout
 mkdir -p "$DIR" "$ICONDIR" "$WEBICON"
 [ -f "$MODEFILE" ] || echo stop > "$MODEFILE"
 
@@ -19,6 +21,16 @@ mkdir -p "$DIR" "$ICONDIR" "$WEBICON"
 . "$MODDIR/bin/tombstone-lib.sh"
 
 cmd=${1:-snapshot}
+
+_run() {
+  secs=$1
+  shift
+  if [ -x "$TIMEOUT" ]; then
+    "$TIMEOUT" -k 1 "$secs" "$@"
+  else
+    "$@"
+  fi
+}
 
 get_mode() {
   m=$(tr -d ' \t\r\n' < "$MODEFILE" 2>/dev/null)
@@ -31,31 +43,23 @@ get_mode() {
 revive_pkg() {
   pkg=$1
   [ -n "$pkg" ] || return 1
+  # Only revive packages we marked — never spray pm enable.
+  [ -f "$DIR/tombstone.$pkg" ] || [ -f "$DIR/comps-disabled.$pkg" ] || return 0
   tombstone_revive "$pkg"
 }
 
-# Revive packages we hail-disabled (leaving disable mode). Fast path if none.
+# Only marker files — no per-blacklist pm list -d loop.
 revive_all_tombstones() {
-  any=
   for f in "$DIR"/tombstone.* "$DIR"/comps-disabled.*; do
     [ -f "$f" ] || continue
-    any=1
     base=${f##*/}
     case "$base" in
       tombstone.*) pkg=${base#tombstone.} ;;
       comps-disabled.*) pkg=${base#comps-disabled.} ;;
       *) continue ;;
     esac
-    [ -n "$pkg" ] && revive_pkg "$pkg"
+    [ -n "$pkg" ] && tombstone_revive "$pkg"
   done
-  # Avoid pm list packages -d per blacklist row when nothing was tombstoned.
-  [ -n "$any" ] || return 0
-  [ -f "$LIST" ] || return 0
-  while IFS= read -r pkg || [ -n "$pkg" ]; do
-    case "$pkg" in ''|\#*) continue ;; esac
-    hail_is_pkg_disabled "$pkg" || continue
-    revive_pkg "$pkg"
-  done < "$LIST"
 }
 
 set_mode() {
@@ -90,7 +94,6 @@ thaw_pkg() {
   echo OK
 }
 
-# Hail LAUNCH: enable + start launcher activity
 launch_pkg() {
   pkg=$2
   [ -n "$pkg" ] || { echo "usage: launch-pkg <pkg>" >&2; return 1; }
@@ -102,7 +105,7 @@ launch_pkg() {
   fi
 }
 
-# Never walk all /proc (8000+ PIDs freezes KernelSU WebUI). pidfile + lock only.
+# O(1): pidfile identity check + flock holder. Never glob /proc.
 kill_daemon() {
   pidf=$DIR/daemon.pid
   if [ -f "$pidf" ]; then
@@ -110,8 +113,14 @@ kill_daemon() {
     case "$pid" in
       ''|*[!0-9]*) ;;
       *)
-        kill "$pid" 2>/dev/null || true
-        kill -9 "$pid" 2>/dev/null || true
+        if [ -r "/proc/$pid/cmdline" ]; then
+          case "$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null)" in
+            *bgfreeze*)
+              kill "$pid" 2>/dev/null || true
+              kill -9 "$pid" 2>/dev/null || true
+              ;;
+          esac
+        fi
         ;;
     esac
   fi
@@ -154,11 +163,11 @@ find_aapt() {
 refresh_label_cache() {
   aapt=$(find_aapt) || aapt=
   : > "$LABELCACHE.tmp"
-  pm list packages -3 2>/dev/null | sed 's/^package://' | while read -r pkg; do
+  _run 5 "$PM" list packages -3 2>/dev/null | sed 's/^package://' | while read -r pkg; do
     [ -n "$pkg" ] || continue
     label=
     if [ -n "$aapt" ]; then
-      apk=$(pm path "$pkg" 2>/dev/null | head -1 | cut -d: -f2)
+      apk=$(_run 2 "$PM" path "$pkg" 2>/dev/null | head -1 | cut -d: -f2)
       if [ -n "$apk" ] && [ -f "$apk" ]; then
         bad=$("$aapt" dump badging "$apk" 2>/dev/null) || bad=
         label=$(printf '%s\n' "$bad" | grep "application-label-zh-CN:" | head -1 \
@@ -185,7 +194,7 @@ refresh_label_cache() {
 # pkg \t label \t 0|1(checked) \t 0|1(has_web_icon)
 snapshot_apps() {
   [ -f "$LIST" ] || touch "$LIST"
-  pm list packages -3 2>/dev/null | sed 's/^package://' | sort -u > "$PKGFILE"
+  _run 5 "$PM" list packages -3 2>/dev/null | sed 's/^package://' | sort -u > "$PKGFILE"
 
   if [ -s "$LABELCACHE" ]; then
     awk -F '\t' -v listdir="$LIST" -v icondir="$WEBICON" '
@@ -242,7 +251,6 @@ snapshot_apps() {
 }
 
 list_apps() {
-  # Back-compat: pkg \t label only
   snapshot_apps | awk -F '\t' '{ print $1 "\t" $2 }'
 }
 
@@ -267,7 +275,7 @@ set_blacklist() {
       printf '%s\n' "$p" >> "$tmp"
     done
   fi
-  # Packages removed from blacklist → revive if we had disabled them
+  # Removed from list → revive only if we had tombstoned them
   while IFS= read -r p || [ -n "$p" ]; do
     case "$p" in ''|\#*) continue ;; esac
     grep -qxF "$p" "$tmp" 2>/dev/null && continue
@@ -280,7 +288,6 @@ set_blacklist() {
   echo OK
 }
 
-# Extract one PNG into webroot/icons (and private ICONDIR). Prints nothing; exit 0/1.
 extract_icon_file() {
   pkg=$1
   [ -n "$pkg" ] || return 1
@@ -291,7 +298,7 @@ extract_icon_file() {
     [ -f "$ICONDIR/$pkg.png" ] || cp -f "$out" "$ICONDIR/$pkg.png" 2>/dev/null || true
     return 0
   fi
-  apk=$(pm path "$pkg" 2>/dev/null | head -1 | cut -d: -f2)
+  apk=$(_run 2 "$PM" path "$pkg" 2>/dev/null | head -1 | cut -d: -f2)
   [ -n "$apk" ] && [ -f "$apk" ] || return 1
   cand=$(unzip -l "$apk" 2>/dev/null | awk '/ic_launcher.*\.png$/ {print $NF}')
   [ -n "$cand" ] || cand=$(unzip -l "$apk" 2>/dev/null | awk '/mipmap.*\.png$/ {print $NF}' | head -15)
@@ -314,18 +321,16 @@ extract_icon_file() {
 }
 
 extract_icon() {
-  # Legacy: stdout base64 (slow path for old WebUI)
   pkg=$1
   extract_icon_file "$pkg" || exit 1
   base64 "$WEBICON/$pkg.png" 2>/dev/null | tr -d '\n'
 }
 
-# Warm webroot icons for packages missing PNG. Cap extractions so UI stays free.
 cache_icons() {
   mkdir -p "$WEBICON"
-  limit=${1:-60}
+  limit=${1:-40}
   n=0
-  pm list packages -3 2>/dev/null | sed 's/^package://' | sort -u > "$PKGFILE"
+  _run 5 "$PM" list packages -3 2>/dev/null | sed 's/^package://' | sort -u > "$PKGFILE"
   while IFS= read -r pkg || [ -n "$pkg" ]; do
     [ -n "$pkg" ] || continue
     [ -f "$WEBICON/$pkg.png" ] && [ -s "$WEBICON/$pkg.png" ] && continue
@@ -343,7 +348,7 @@ case "$cmd" in
   refresh-labels)
     refresh_label_cache && echo OK || echo FAIL
     ;;
-  cache-icons) cache_icons "${2:-60}" ;;
+  cache-icons) cache_icons "${2:-40}" ;;
   get-blacklist) get_blacklist ;;
   set-blacklist) set_blacklist "$@" ;;
   get-mode) get_mode ;;
@@ -363,22 +368,17 @@ case "$cmd" in
     ;;
   restart)
     kill_daemon
-    sleep 1
     start_daemon
     echo OK
     ;;
   emergency|recover)
-    # Immediate safe restore — stop daemon, enable disabled pkgs, disable module
+    # Safe restore: stop us only — never pm-enable every disabled package on device.
     kill_daemon
     touch "$MODDIR/disable" 2>/dev/null || true
     echo stop > "$MODEFILE"
     rm -f "$DIR/allow-disable-on-boot" "$DIR/circuit.open" "$DIR"/fail.*
     : > "$LIST"
     revive_all_tombstones
-    pm list packages -d 2>/dev/null | sed 's/^package://' | while read -r p; do
-      [ -n "$p" ] || continue
-      pm enable --user 0 "$p" >/dev/null 2>&1 || pm enable "$p" >/dev/null 2>&1 || true
-    done
     rm -f "$DIR"/tombstone.* "$DIR"/frozen.* "$DIR"/bg.* "$DIR"/watch.* "$DIR"/comps-*
     echo RECOVER_OK
     ;;

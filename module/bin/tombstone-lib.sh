@@ -1,9 +1,27 @@
 #!/system/bin/sh
-# Hail-style helpers + safe process helpers.
-# Rules: ONE attempt, verify once, fail-fast. No binder retry storms.
-# Process scans: at most ONE awk over /proc/*/status (never per-pid fork).
+# Hail-style helpers. Systems rules for WebUI/shell glue:
+# - Fail-fast, no Binder retry storms
+# - Absolute paths for am/pm when possible
+# - At most ONE pm list packages -d per operation (cached)
+# - Never walk all /proc from WebUI-facing paths
+# - Prefer ps -A over /proc glob; /proc glob only as last resort for one uid
 
 # Requires: DIR
+
+PM=/system/bin/pm
+AM=/system/bin/am
+TIMEOUT=/system/bin/timeout
+
+_run() {
+  # _run <secs> <bin> [args...]
+  secs=$1
+  shift
+  if [ -x "$TIMEOUT" ]; then
+    "$TIMEOUT" -k 1 "$secs" "$@"
+  else
+    "$@"
+  fi
+}
 
 hail_is_critical_pkg() {
   case "$1" in
@@ -23,29 +41,34 @@ hail_is_critical_pkg() {
 }
 
 hail_user_id() {
-  u=$(am get-current-user 2>/dev/null | tr -d ' \t\r\n')
+  u=$(_run 2 "$AM" get-current-user 2>/dev/null | tr -d ' \t\r\n')
   case "$u" in
     ''|*[!0-9]*) echo 0 ;;
     *) echo "$u" ;;
   esac
 }
 
-# Light check: pm list only (no dumpsys). Exit 0 = disabled.
-hail_is_pkg_disabled() {
-  pkg=$1
-  pm list packages -d 2>/dev/null | grep -q "^package:${pkg}$"
+# One Binder call; reused by hail_is_pkg_disabled within this process.
+hail_refresh_disabled_cache() {
+  HAIL_DISABLED_CACHE=$(_run 3 "$PM" list packages -d 2>/dev/null | sed 's/^package://')
+  HAIL_DISABLED_LOADED=1
 }
 
-# True if last binder-facing command looked like a hard failure.
+hail_is_pkg_disabled() {
+  pkg=$1
+  [ -n "$pkg" ] || return 1
+  [ "${HAIL_DISABLED_LOADED:-0}" = "1" ] || hail_refresh_disabled_cache
+  printf '%s\n' "$HAIL_DISABLED_CACHE" | grep -qxF "$pkg"
+}
+
 hail_is_binder_fail() {
   case "$1" in
-    *Failed\ transaction*|*DeadObject*|*NullPointerException*|*RemoteException*)
+    *Failed\ transaction*|*DeadObject*|*NullPointerException*|*RemoteException*|*TimedOut*|*timeout*)
       return 0 ;;
   esac
   return 1
 }
 
-# Open global circuit: stop further disable/pm storms until manual clear.
 hail_trip_circuit() {
   reason=$1
   echo "$reason" > "$DIR/circuit.open"
@@ -74,7 +97,7 @@ tombstone_apply() {
   uid=$(hail_user_id)
   rm -f "$DIR/comps-list.$pkg" "$DIR/comps-disabled.$pkg"
 
-  # Already disabled → success without more binder traffic
+  hail_refresh_disabled_cache
   if hail_is_pkg_disabled "$pkg"; then
     echo 1 > "$DIR/tombstone.$pkg"
     echo 1 > "$DIR/frozen.$pkg"
@@ -82,16 +105,14 @@ tombstone_apply() {
     return 0
   fi
 
-  # ONE force-stop
-  out_fs=$(am force-stop --user "$uid" "$pkg" 2>&1)
+  out_fs=$(_run 3 "$AM" force-stop --user "$uid" "$pkg" 2>&1)
   if hail_is_binder_fail "$out_fs"; then
     hail_trip_circuit "force-stop:$pkg:$out_fs"
     echo 0
     return 1
   fi
 
-  # ONE disable (no disable-user / bare fallback chain)
-  out=$(pm disable --user "$uid" "$pkg" 2>&1)
+  out=$(_run 3 "$PM" disable --user "$uid" "$pkg" 2>&1)
   rc=$?
   if hail_is_binder_fail "$out"; then
     hail_trip_circuit "pm-disable:$pkg:$out"
@@ -104,7 +125,8 @@ tombstone_apply() {
     return 1
   fi
 
-  # ONE verify
+  HAIL_DISABLED_LOADED=0
+  hail_refresh_disabled_cache
   if hail_is_pkg_disabled "$pkg"; then
     echo 1 > "$DIR/tombstone.$pkg"
     echo 1 > "$DIR/frozen.$pkg"
@@ -120,15 +142,17 @@ tombstone_apply() {
 
 tombstone_revive() {
   pkg=$1
+  [ -n "$pkg" ] || return 1
+  # Only touch PackageManager if we marked this pkg (or caller insists via file).
   uid=$(hail_user_id)
-  # ONE enable + ONE unsuspend — no loops
-  pm enable --user "$uid" "$pkg" >/dev/null 2>&1 || true
-  pm unsuspend --user "$uid" "$pkg" >/dev/null 2>&1 || true
+  _run 3 "$PM" enable --user "$uid" "$pkg" >/dev/null 2>&1 || true
+  _run 3 "$PM" unsuspend --user "$uid" "$pkg" >/dev/null 2>&1 || true
   rm -f "$DIR/tombstone.$pkg" "$DIR/frozen.$pkg" "$DIR/bg.$pkg" "$DIR/watch.$pkg" \
     "$DIR/comps-disabled.$pkg" "$DIR/comps-list.$pkg" "$DIR/fail.$pkg"
+  HAIL_DISABLED_LOADED=0
 }
 
-# List pids for app uid — prefer ONE `ps`+|awk` (no per-pid forks).
+# Prefer one `ps` (no /proc glob). Fallback is last resort.
 pids_for_uid() {
   uid=$1
   [ -n "$uid" ] || return 0
@@ -138,12 +162,19 @@ pids_for_uid() {
     printf '%s\n' "$out"
     return 0
   fi
-  # Fallback if ps columns unsupported
-  grep -l "^Uid:[[:space:]]*${uid}[[:space:]]" /proc/[0-9]*/status 2>/dev/null \
-    | sed -n 's|^/proc/\([0-9][0-9]*\)/status$|\1|p'
+  # Last resort: only this uid's status files via find -maxdepth (still bounded intent)
+  # Avoid shell glob /proc/[0-9]* which expands to thousands of args.
+  if [ -x /system/bin/find ]; then
+    /system/bin/find /proc -maxdepth 2 -name status 2>/dev/null \
+      | while read -r st; do
+          grep -q "^Uid:[[:space:]]*${uid}[[:space:]]" "$st" 2>/dev/null || continue
+          p=${st#/proc/}; p=${p%/status}
+          case "$p" in ''|*[!0-9]*) continue ;; esac
+          echo "$p"
+        done
+  fi
 }
 
-# Snap only matching pids (usually few) — sed State, no global awk storm.
 snap_uid() {
   uid=$1
   total=0
@@ -171,11 +202,15 @@ snap_uid() {
   echo "total=$total T=$nt run=$nr [${detail# }]"
 }
 
+# SIGSTOP only with O(1) uid re-check per pid (TOCTOU).
 freeze_uid() {
   uid=$1
   n=0
   for p in $(pids_for_uid "$uid"); do
-    st=$(sed -n 's/^State:[[:space:]]*\([^[:space:]]*\).*/\1/p' /proc/"$p"/status 2>/dev/null | head -1)
+    [ -r "/proc/$p/status" ] || continue
+    u=$(awk '/^Uid:/{print $2; exit}' /proc/"$p"/status 2>/dev/null)
+    [ "$u" = "$uid" ] || continue
+    st=$(awk '/^State:/{print $2; exit}' /proc/"$p"/status 2>/dev/null)
     [ "$st" = "T" ] && continue
     kill -STOP "$p" 2>/dev/null || continue
     n=$((n + 1))
@@ -184,7 +219,11 @@ freeze_uid() {
 }
 
 thaw_uid() {
-  for p in $(pids_for_uid "$1"); do
+  uid=$1
+  for p in $(pids_for_uid "$uid"); do
+    [ -r "/proc/$p/status" ] || continue
+    u=$(awk '/^Uid:/{print $2; exit}' /proc/"$p"/status 2>/dev/null)
+    [ "$u" = "$uid" ] || continue
     kill -CONT "$p" 2>/dev/null || true
   done
 }
@@ -206,12 +245,12 @@ tombstone_launch() {
   pkg=$1
   uid=$(hail_user_id)
   tombstone_revive "$pkg"
-  if monkey --user "$uid" -p "$pkg" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; then
+  if _run 5 monkey --user "$uid" -p "$pkg" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; then
     return 0
   fi
-  cmp=$(cmd package resolve-activity --brief "$pkg" 2>/dev/null | tail -n 1)
+  cmp=$(_run 3 cmd package resolve-activity --brief "$pkg" 2>/dev/null | tail -n 1)
   case "$cmp" in
-    */*) am start --user "$uid" -n "$cmp" >/dev/null 2>&1 ;;
+    */*) _run 3 "$AM" start --user "$uid" -n "$cmp" >/dev/null 2>&1 ;;
     *) return 1 ;;
   esac
 }

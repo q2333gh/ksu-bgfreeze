@@ -75,6 +75,26 @@ h1 {
 .btn:disabled {
   opacity: 0.45;
 }
+.btn.primary.needs-save {
+  box-shadow: 0 0 0 2px rgba(61, 156, 240, 0.45);
+}
+.dirty {
+  color: #e0a34a;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 8px 0 0;
+}
+#app.is-busy {
+  cursor: progress;
+}
+#app.is-busy .row,
+#app.is-busy .opt {
+  opacity: 0.72;
+  pointer-events: none;
+}
+#app.is-busy .btn:not(:disabled) {
+  pointer-events: none;
+}
 
 .search-wrap { display: block; margin: 8px 0 4px; }
 #q {

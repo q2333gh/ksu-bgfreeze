@@ -36,7 +36,7 @@ CI（GitHub）：`Precheck` → `Auto Tag`（升号 → lightweight `v*` → `gh
 
 1. **改完必闭环**：升 `version`/`versionCode` + `CHANGELOG` → commit → push Origin → 同步 GitHub `main` → 盯 Precheck / Auto Tag / Release 全绿。例外：用户说不要提交/发版；纯问答；仅文档且未要求发版可不升号。
 2. **immutable only**：禁止手搓残缺 release、禁止 `git tag -f`、禁止复用 `versionCode`/tag；失败只能升号重发。细节 → skill `release`。
-3. **特权 daemon 安全**（改 `daemon/` / `module/bin/` / 冻结语义前必守）：fail-fast + 熔断；`flock` 单实例；只动黑名单 app uid≥10000；PID 用前复核 uid（或 cgroup-uid）；Binder 有超时/配额；热路径 Θ(T) 一拍快照。细则 → `docs/SYSTEMS_PROGRAMMING_REVIEW.md`。
+3. **特权 daemon / shell 安全**（改 `daemon/` / `module/bin/` / WebUI 胶水前必守）：fail-fast + 熔断；`flock` 单实例；只动黑名单 app uid≥10000；PID 用前复核 uid（或 cgroup-uid）；Binder 有超时/配额；热路径 Θ(T) 一拍快照；**WebUI 路径禁止 `/proc` 全表扫描**。细则 → `docs/SYSTEMS_PROGRAMMING_REVIEW.md` · `module/AGENTS.md`。
 4. **黑名单-only**；`mode=disable` 须先有 `allow-disable`；默认 `mode=stop`。
 5. **不改生成物当作源**：`daemon/target/`；`dist/*.zip` 仅作产物提交，勿当已发版。
 

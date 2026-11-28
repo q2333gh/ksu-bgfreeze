@@ -3,10 +3,12 @@
 
   const MOD = "/data/adb/modules/ksu-bgfreeze";
   const SH = "sh " + MOD + "/bin/apps.sh";
-  const CACHE_KEY = "bgf_snapshot_v3";
+  const CACHE_KEY = "bgf_snapshot_v5";
+  const UI = "405";
 
   const statusEl = document.getElementById("status");
   const hintEl = document.getElementById("hint");
+  const dirtyEl = document.getElementById("dirty");
   const qEl = document.getElementById("q");
   const frozenList = document.getElementById("frozenList");
   const allList = document.getElementById("allList");
@@ -15,19 +17,32 @@
   const allCount = document.getElementById("allCount");
   const btnApply = document.getElementById("btnApply");
   const btnReload = document.getElementById("btnReload");
-  const btnMode = document.getElementById("btnMode");
   const modeStop = document.getElementById("modeStop");
   const modeDisable = document.getElementById("modeDisable");
+  const appRoot = document.getElementById("app");
 
   let apps = [];
   let filter = "";
   let mode = "stop";
+  let savedMode = "stop";
+  let savedPkgs = [];
   let iconGen = 0;
   let listMs = 0;
   let busy = false;
+  let lastTap = 0;
 
   function setStatus(t) {
     if (statusEl) statusEl.textContent = t || "";
+  }
+
+  function setBusy(on, label) {
+    busy = !!on;
+    if (appRoot) appRoot.classList.toggle("is-busy", busy);
+    if (btnApply) btnApply.disabled = busy;
+    if (btnReload) btnReload.disabled = busy;
+    if (modeStop) modeStop.disabled = busy;
+    if (modeDisable) modeDisable.disabled = busy;
+    if (on && label) setStatus(label);
   }
 
   function toast(msg) {
@@ -39,35 +54,41 @@
     }
   }
 
-  /** Activate handler: click + touchend (KernelSU WebView often drops click). */
+  /** Single-fire tap: ignore duplicate click after touchend within 450ms. */
+  function shouldAcceptTap() {
+    const now = Date.now();
+    if (now - lastTap < 450) return false;
+    lastTap = now;
+    return true;
+  }
+
   function bindTap(el, fn) {
     if (!el) return;
-    let lock = false;
     const run = (e) => {
-      if (lock || busy) return;
-      if (e) {
-        try { e.preventDefault(); } catch (_) {}
+      if (busy) return;
+      if (!shouldAcceptTap()) {
+        if (e) {
+          try {
+            e.preventDefault();
+          } catch (_) {}
+        }
+        return;
       }
-      lock = true;
+      if (e) {
+        try {
+          e.preventDefault();
+        } catch (_) {}
+      }
       Promise.resolve()
         .then(() => fn(e))
-        .catch((err) => setStatus(String(err && err.message ? err.message : err)))
-        .then(() => {
-          setTimeout(() => { lock = false; }, 300);
-        });
+        .catch((err) => setStatus(String(err && err.message ? err.message : err)));
     };
     el.addEventListener("click", run);
-    el.addEventListener(
-      "touchend",
-      (e) => {
-        run(e);
-      },
-      { passive: false }
-    );
+    el.addEventListener("touchend", run, { passive: false });
   }
 
   function exec(cmd, timeoutMs) {
-    const ms = timeoutMs || 25000;
+    const ms = timeoutMs || 10000;
     return new Promise((resolve, reject) => {
       if (!window.ksu || typeof ksu.exec !== "function") {
         reject(new Error("请用 KernelSU 打开本模块 WebUI"));
@@ -78,14 +99,18 @@
       const timer = setTimeout(() => {
         if (done) return;
         done = true;
-        try { delete window[cb]; } catch (_) {}
+        try {
+          delete window[cb];
+        } catch (_) {}
         reject(new Error("超时"));
       }, ms);
       window[cb] = (errno, stdout, stderr) => {
         if (done) return;
         done = true;
         clearTimeout(timer);
-        try { delete window[cb]; } catch (_) {}
+        try {
+          delete window[cb];
+        } catch (_) {}
         if (errno === 0 || errno === "0") resolve(stdout || "");
         else reject(new Error(stderr || stdout || String(errno)));
       };
@@ -118,25 +143,64 @@
     return apps.filter((a) => a.checked).map((a) => a.pkg);
   }
 
+  function pkgsEqual(a, b) {
+    if (a.length !== b.length) return false;
+    const sa = a.slice().sort();
+    const sb = b.slice().sort();
+    for (let i = 0; i < sa.length; i++) if (sa[i] !== sb[i]) return false;
+    return true;
+  }
+
+  function isDirty() {
+    return mode !== savedMode || !pkgsEqual(selectedPkgs(), savedPkgs);
+  }
+
+  function updateDirty() {
+    const dirty = isDirty();
+    if (dirtyEl) {
+      dirtyEl.hidden = !dirty;
+      if (dirty) {
+        const n = selectedPkgs().length;
+        dirtyEl.textContent =
+          "未保存" +
+          (mode !== savedMode ? " · 模式" : "") +
+          (pkgsEqual(selectedPkgs(), savedPkgs) ? "" : " · 名单 " + n);
+      }
+    }
+    if (btnApply) {
+      btnApply.classList.toggle("needs-save", dirty);
+      btnApply.textContent = dirty ? "保存更改" : "已是最新";
+    }
+  }
+
   function updateHint() {
     if (!hintEl) return;
     hintEl.textContent =
       mode === "disable"
-        ? "Hail 停用：退后台整包 pm disable（图标可能消失）。用「打开」解冻并启动。"
-        : "SIGSTOP：退后台暂停进程。改勾选后请点「应用名单」。";
+        ? "Hail 停用需 allow-disable。勾选后点「保存更改」。"
+        : "勾选要冻结的应用，点「保存更改」。列表操作不扫 /proc。";
   }
 
   function syncModeRadios() {
     if (modeStop) modeStop.checked = mode === "stop";
     if (modeDisable) modeDisable.checked = mode === "disable";
     updateHint();
+    updateDirty();
   }
 
   function saveCache() {
     try {
       localStorage.setItem(
         CACHE_KEY,
-        JSON.stringify({ t: Date.now(), mode, iconGen, apps })
+        JSON.stringify({
+          t: Date.now(),
+          mode,
+          savedMode,
+          savedPkgs,
+          iconGen,
+          apps,
+          ui: UI,
+        })
       );
     } catch (_) {}
   }
@@ -146,6 +210,8 @@
       const o = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
       if (!o || !Array.isArray(o.apps) || !o.apps.length) return null;
       if (o.mode === "disable" || o.mode === "stop") mode = o.mode;
+      if (o.savedMode === "disable" || o.savedMode === "stop") savedMode = o.savedMode;
+      if (Array.isArray(o.savedPkgs)) savedPkgs = o.savedPkgs;
       if (typeof o.iconGen === "number") iconGen = o.iconGen;
       return o.apps;
     } catch (_) {
@@ -176,14 +242,31 @@
     const q = filter.trim().toLowerCase();
     if (!q) return true;
     return (
-      app.label.toLowerCase().includes(q) ||
-      app.pkg.toLowerCase().includes(q)
+      app.label.toLowerCase().includes(q) || app.pkg.toLowerCase().includes(q)
     );
+  }
+
+  function fillIcon(icon, app) {
+    icon.style.background = colorFor(app.pkg);
+    icon.textContent = initial(app.label, app.pkg);
+    if (!app.hasIcon) return;
+    const img = document.createElement("img");
+    img.alt = "";
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.src = "icons/" + encodeURIComponent(app.pkg) + ".png?v=" + iconGen;
+    img.onload = () => {
+      icon.textContent = "";
+      icon.style.background = "transparent";
+      icon.appendChild(img);
+    };
+    img.onerror = () => {};
   }
 
   function makeRow(app, compact) {
     const row = document.createElement("label");
-    row.className = "row" + (app.checked ? " frozen" : "") + (compact ? " compact" : "");
+    row.className =
+      "row" + (app.checked ? " frozen" : "") + (compact ? " compact" : "");
     row.dataset.pkg = app.pkg;
 
     const cb = document.createElement("input");
@@ -193,18 +276,7 @@
 
     const icon = document.createElement("div");
     icon.className = "icon";
-    icon.style.background = colorFor(app.pkg);
-    icon.textContent = initial(app.label, app.pkg);
-    const img = document.createElement("img");
-    img.alt = "";
-    img.loading = "lazy";
-    img.src = "icons/" + encodeURIComponent(app.pkg) + ".png?v=" + iconGen;
-    img.onload = () => {
-      icon.textContent = "";
-      icon.style.background = "transparent";
-      icon.appendChild(img);
-    };
-    img.onerror = () => {};
+    fillIcon(icon, app);
 
     const meta = document.createElement("div");
     meta.className = "meta";
@@ -275,13 +347,14 @@
     setStatus(
       apps.length
         ? apps.length +
-            " 个应用 · 黑名单 " +
+            " 个 · 黑名单 " +
             selectedPkgs().length +
             " · " +
-            (mode === "disable" ? "Hail停用" : "STOP") +
+            (mode === "disable" ? "Hail" : "冻结") +
             (listMs ? " · " + listMs + "ms" : "")
         : "无应用数据"
     );
+    updateDirty();
   }
 
   function findApp(pkg) {
@@ -289,98 +362,104 @@
     return null;
   }
 
+  /** Checkbox: update model + light re-render only when section membership changes. */
   function onListChange(e) {
     const t = e.target;
     if (!t || t.type !== "checkbox" || !t.dataset.pkg) return;
+    if (busy) {
+      t.checked = !t.checked;
+      return;
+    }
     const app = findApp(t.dataset.pkg);
     if (!app) return;
+    const was = !!app.checked;
     app.checked = !!t.checked;
+    if (was === app.checked) return;
     saveCache();
+    // Crossing frozen/other boundary → full render; else just dirty flag.
     render();
   }
 
   async function doThaw(pkg) {
-    busy = true;
-    setStatus("解冻 " + pkg + "…");
+    if (busy || !shouldAcceptTap()) return;
+    setBusy(true, "解冻 " + pkg + "…");
     try {
-      await exec(SH + " thaw-pkg '" + pkg.replace(/'/g, "") + "'", 30000);
+      await exec(SH + " thaw-pkg '" + pkg.replace(/'/g, "") + "'", 8000);
       toast("已解冻");
       setStatus("已解冻 " + pkg);
     } catch (e) {
       setStatus(String(e.message || e));
       toast("解冻失败");
     } finally {
-      busy = false;
+      setBusy(false);
     }
   }
 
   async function doLaunch(pkg) {
-    busy = true;
-    setStatus("打开 " + pkg + "…");
+    if (busy || !shouldAcceptTap()) return;
+    setBusy(true, "打开 " + pkg + "…");
     try {
-      await exec(SH + " launch-pkg '" + pkg.replace(/'/g, "") + "'", 30000);
+      await exec(SH + " launch-pkg '" + pkg.replace(/'/g, "") + "'", 8000);
       toast("已打开");
       setStatus("已打开 " + pkg);
     } catch (e) {
       setStatus(String(e.message || e));
       toast("打开失败");
     } finally {
-      busy = false;
+      setBusy(false);
     }
   }
 
   async function doApply() {
-    busy = true;
-    if (btnApply) btnApply.disabled = true;
-    setStatus("写入黑名单…");
+    if (busy) return;
+    if (!isDirty()) {
+      toast("没有需要保存的更改");
+      return;
+    }
+    setBusy(true, "保存中…");
     try {
+      if (mode !== savedMode) {
+        await exec(SH + " set-mode " + mode, 8000);
+        savedMode = mode;
+      }
       const pkgs = selectedPkgs();
       const arg =
         pkgs.length === 0
           ? ""
           : " " + pkgs.map((p) => "'" + p.replace(/'/g, "") + "'").join(" ");
-      await exec(SH + " set-blacklist" + arg, 15000);
+      await exec(SH + " set-blacklist" + arg, 10000);
+      savedPkgs = pkgs.slice();
       saveCache();
-      toast("已应用");
-      setStatus("名单已写入 · 黑名单 " + pkgs.length);
-    } catch (e) {
-      setStatus(String(e.message || e));
-      toast("应用失败");
-    } finally {
-      busy = false;
-      if (btnApply) btnApply.disabled = false;
-    }
-  }
-
-  async function doSetMode() {
-    const next =
-      modeDisable && modeDisable.checked
-        ? "disable"
-        : "stop";
-    busy = true;
-    if (btnMode) btnMode.disabled = true;
-    setStatus("切换模式…");
-    try {
-      await exec(SH + " set-mode " + next, 12000);
-      mode = next;
-      saveCache();
-      render();
-      toast(next === "disable" ? "已切 Hail 停用" : "已切 SIGSTOP");
+      toast("已保存");
+      setStatus("已保存 · 黑名单 " + pkgs.length + " · " + (mode === "disable" ? "Hail" : "冻结"));
+      updateDirty();
     } catch (e) {
       const msg = String(e.message || e);
       setStatus(msg);
-      toast(msg.includes("allow-disable") ? "需先 touch allow-disable" : "切换失败");
+      toast(msg.includes("allow-disable") ? "需先 touch allow-disable" : "保存失败");
       syncModeRadios();
     } finally {
-      busy = false;
-      if (btnMode) btnMode.disabled = false;
+      setBusy(false);
     }
+  }
+
+  function onModeChange() {
+    if (busy) {
+      syncModeRadios();
+      return;
+    }
+    const next = modeDisable && modeDisable.checked ? "disable" : "stop";
+    mode = next;
+    updateHint();
+    updateDirty();
+    saveCache();
+    // Re-render badges only when mode string changes for checked rows
+    render();
   }
 
   async function refreshFromDevice() {
     setStatus("读取应用列表…");
     const t0 = Date.now();
-    // Keep short — long apps.sh used to walk /proc and freeze WebUI.
     const raw = await exec(SH + " snapshot", 8000);
     let modeRaw = "stop";
     try {
@@ -388,7 +467,9 @@
     } catch (_) {}
     listMs = Date.now() - t0;
     mode = String(modeRaw || "").trim() === "disable" ? "disable" : "stop";
+    savedMode = mode;
     apps = parseSnapshot(raw);
+    savedPkgs = selectedPkgs();
     saveCache();
     render();
   }
@@ -402,8 +483,9 @@
         checked: !!a.checked,
         hasIcon: !!a.hasIcon,
       }));
+      if (!savedPkgs.length) savedPkgs = selectedPkgs();
       render();
-      setStatus("缓存已显示 · 刷新中…");
+      setStatus("缓存 · 刷新中…");
     }
     try {
       await refreshFromDevice();
@@ -417,10 +499,10 @@
     }
   }
 
-  // Native checkbox change — most reliable in WebView
   document.addEventListener("change", onListChange, false);
+  if (modeStop) modeStop.addEventListener("change", onModeChange);
+  if (modeDisable) modeDisable.addEventListener("change", onModeChange);
 
-  // Thaw / Launch buttons via delegation
   function onActionTap(e) {
     const t = e.target;
     if (!t || !t.dataset) return;
@@ -440,27 +522,26 @@
   document.addEventListener("touchend", onActionTap, { passive: false });
 
   if (qEl) {
+    let qTimer = 0;
     qEl.addEventListener("input", () => {
       filter = qEl.value || "";
-      render();
+      clearTimeout(qTimer);
+      qTimer = setTimeout(() => render(), 80);
     });
   }
 
   bindTap(btnApply, doApply);
   bindTap(btnReload, async () => {
-    busy = true;
-    if (btnReload) btnReload.disabled = true;
+    setBusy(true, "刷新列表…");
     try {
       await refreshFromDevice();
     } catch (e) {
       setStatus(String(e.message || e));
     } finally {
-      busy = false;
-      if (btnReload) btnReload.disabled = false;
+      setBusy(false);
     }
   });
-  bindTap(btnMode, doSetMode);
 
-  setStatus("UI 400 · 初始化…");
+  setStatus("UI " + UI + " · 初始化…");
   boot();
 })();

@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>后台冻结</title>
-  <link rel="stylesheet" href="style.css?v=400" />
+  <link rel="stylesheet" href="style.css?v=405" />
 </head>
-<body data-ui="400">
+<body data-ui="405">
   <div id="app">
     <h1>后台冻结</h1>
-    <p id="hint" class="hint">勾选要冻结的应用，选模式后点「应用名单」。</p>
+    <p id="hint" class="hint">勾选应用后点「保存更改」。模式与名单一次写入。</p>
 
     <fieldset class="box">
       <legend>冻结模式</legend>
@@ -20,20 +20,20 @@
       </label>
       <label class="opt">
         <input type="radio" name="mode" id="modeDisable" value="disable" />
-        <span>Hail 停用（需先 touch allow-disable）</span>
+        <span>Hail 停用（需 allow-disable）</span>
       </label>
-      <button type="button" id="btnMode" class="btn">切换模式</button>
     </fieldset>
 
-    <fieldset class="box">
+    <fieldset class="box actions">
       <legend>操作</legend>
-      <button type="button" id="btnApply" class="btn primary">应用名单</button>
+      <button type="button" id="btnApply" class="btn primary">保存更改</button>
       <button type="button" id="btnReload" class="btn">刷新列表</button>
+      <p id="dirty" class="dirty" hidden>未保存</p>
       <p id="status" class="status">准备中…</p>
     </fieldset>
 
     <label class="search-wrap">
-      <input type="search" id="q" placeholder="搜索名称或包名" autocomplete="off" />
+      <input type="search" id="q" placeholder="搜索名称或包名" autocomplete="off" enterkeyhint="search" />
     </label>
 
     <h2 class="h2">正在冻结 <span id="frozenCount">0</span></h2>
@@ -43,6 +43,6 @@
     <h2 class="h2">其它应用 <span id="allCount">0</span></h2>
     <div id="allList" class="rows compact"></div>
   </div>
-  <script src="app.js?v=400"></script>
+  <script src="app.js?v=405"></script>
 </body>
 </html>
