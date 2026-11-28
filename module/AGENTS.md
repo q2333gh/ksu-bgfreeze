@@ -13,6 +13,7 @@
 ## Local rules
 
 - WebUI **禁止**每包一次 `dumpsys package`；列表一次 dumpsys + cache；图标并发限流（见 `docs/UX.md` / `docs/PERF_LIST.md`）。
+- **禁止**在 `apps.sh` / `action.sh` 热路径全表扫 `/proc`（8000+ PID 会卡死 KernelSU WebUI）；停 daemon 只用 pidfile + flock。
 - `set-mode disable` 无 `allow-disable` 必须拒绝。
 - 开机无 `allow-disable` + `allow-disable-on-boot` 时强制 `mode=stop`（`service.sh`）。
 - 打包从仓库根：`bash scripts/pack.sh`。

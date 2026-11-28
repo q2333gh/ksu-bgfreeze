@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.4
+
+- WebUI: stop walking all `/proc` in kill_daemon (was freezing KernelSU module UI on OP12)
+- Faster set-mode / set-blacklist; shorter WebUI exec timeouts
+
 ## v0.6.3
 
 - Auto Tag: after pushing `v*`, dispatch Release via `gh workflow run` (GITHUB_TOKEN tag push does not chain)

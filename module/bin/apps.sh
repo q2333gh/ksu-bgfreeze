@@ -34,10 +34,12 @@ revive_pkg() {
   tombstone_revive "$pkg"
 }
 
-# Revive every package we hail-disabled (used when leaving disable mode).
+# Revive packages we hail-disabled (leaving disable mode). Fast path if none.
 revive_all_tombstones() {
+  any=
   for f in "$DIR"/tombstone.* "$DIR"/comps-disabled.*; do
     [ -f "$f" ] || continue
+    any=1
     base=${f##*/}
     case "$base" in
       tombstone.*) pkg=${base#tombstone.} ;;
@@ -46,6 +48,8 @@ revive_all_tombstones() {
     esac
     [ -n "$pkg" ] && revive_pkg "$pkg"
   done
+  # Avoid pm list packages -d per blacklist row when nothing was tombstoned.
+  [ -n "$any" ] || return 0
   [ -f "$LIST" ] || return 0
   while IFS= read -r pkg || [ -n "$pkg" ]; do
     case "$pkg" in ''|\#*) continue ;; esac
@@ -74,7 +78,6 @@ set_mode() {
     revive_all_tombstones
   fi
   kill_daemon
-  sleep 1
   start_daemon
   echo "OK mode=$(get_mode)"
   [ -f "$DIR/circuit.open" ] && echo "circuit=$(cat "$DIR/circuit.open")"
@@ -99,25 +102,22 @@ launch_pkg() {
   fi
 }
 
+# Never walk all /proc (8000+ PIDs freezes KernelSU WebUI). pidfile + lock only.
 kill_daemon() {
   pidf=$DIR/daemon.pid
   if [ -f "$pidf" ]; then
-    kill "$(cat "$pidf")" 2>/dev/null || true
+    pid=$(tr -d ' \t\r\n' < "$pidf" 2>/dev/null)
+    case "$pid" in
+      ''|*[!0-9]*) ;;
+      *)
+        kill "$pid" 2>/dev/null || true
+        kill -9 "$pid" 2>/dev/null || true
+        ;;
+    esac
   fi
   if [ -f "$DIR/daemon.lock" ] && command -v fuser >/dev/null 2>&1; then
     fuser -k "$DIR/daemon.lock" >/dev/null 2>&1 || true
   fi
-  # Match Rust binary cmdline without pkill -f
-  for st in /proc/[0-9]*/cmdline; do
-    [ -f "$st" ] || continue
-    cmd=$(tr '\0' ' ' < "$st" 2>/dev/null)
-    case "$cmd" in
-      *'/bin/bgfreeze'*daemon*|*bgfreeze\ daemon*)
-        pid=${st#/proc/}; pid=${pid%/cmdline}
-        kill "$pid" 2>/dev/null || true
-        ;;
-    esac
-  done
   rm -f "$pidf"
 }
 
@@ -276,7 +276,6 @@ set_blacklist() {
   mv "$tmp" "$LIST"
   rm -f "$old"
   kill_daemon
-  sleep 1
   start_daemon
   echo OK
 }

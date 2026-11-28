@@ -339,7 +339,7 @@
         pkgs.length === 0
           ? ""
           : " " + pkgs.map((p) => "'" + p.replace(/'/g, "") + "'").join(" ");
-      await exec(SH + " set-blacklist" + arg, 60000);
+      await exec(SH + " set-blacklist" + arg, 15000);
       saveCache();
       toast("已应用");
       setStatus("名单已写入 · 黑名单 " + pkgs.length);
@@ -361,7 +361,7 @@
     if (btnMode) btnMode.disabled = true;
     setStatus("切换模式…");
     try {
-      await exec(SH + " set-mode " + next, 60000);
+      await exec(SH + " set-mode " + next, 12000);
       mode = next;
       saveCache();
       render();
@@ -380,10 +380,11 @@
   async function refreshFromDevice() {
     setStatus("读取应用列表…");
     const t0 = Date.now();
-    const raw = await exec(SH + " snapshot", 30000);
+    // Keep short — long apps.sh used to walk /proc and freeze WebUI.
+    const raw = await exec(SH + " snapshot", 8000);
     let modeRaw = "stop";
     try {
-      modeRaw = await exec(SH + " get-mode", 10000);
+      modeRaw = await exec(SH + " get-mode", 3000);
     } catch (_) {}
     listMs = Date.now() - t0;
     mode = String(modeRaw || "").trim() === "disable" ? "disable" : "stop";
