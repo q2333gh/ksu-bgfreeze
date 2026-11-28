@@ -12,12 +12,12 @@
 
 | 来源 | 手段 | 本仓能否做 |
 |------|------|------------|
-| [AOSP Cached apps freezer](https://source.android.com/docs/core/perf/cached-apps-freezer) | 先 Binder freeze，再 `cgroup.freeze` | CPU 部分 ✅；Binder 需驱动 ioctl + AMS，模块 ❌ |
-| [Binder freezer 语义](https://source.android.com/docs/core/architecture/ipc/binder-freezer) | 同步 Binder 打到已冻进程会杀对端 | 解释「只冻 CPU 可能闪退」；我们接受并文档化 |
-| Freezer / NoActive（Xposed） | V2 uid/`FROZEN` + **同步 Binder 临时解冻** / Re:Kernel | 依赖 Xposed/OEM 补丁；**超出本模块边界** |
-| OP12 实机 | `/sys/fs/cgroup/apps/uid_<uid>/cgroup.freeze` 可写 | ✅ 已用；并兼容 AOSP `/sys/fs/cgroup/uid_<uid>/` |
+| [AOSP Cached apps freezer](https://source.android.com/docs/core/perf/cached-apps-freezer) | 先 Binder freeze，再 `cgroup.freeze` | CPU ✅；Binder 可用 UAPI ioctl（不必改 AMS）→ 见可行性文 |
+| [Binder freezer 语义](https://source.android.com/docs/core/architecture/ipc/binder-freezer) | 同步 Binder 打到已冻进程会杀对端 | 双冻后由驱动回 `BR_FROZEN_REPLY`；仍须门闩 |
+| Freezer / NoActive（Xposed） | V2 + 同步 Binder 临时解冻 / Re:Kernel | 高级策略可参考；**不强制 Xposed** |
+| OP12 实机 | cgroup 可写；**`BINDER_FREEZE` 对他 pid 成功** | ✅ 探针 2026-11-28 |
 
-**结论**：目标「默认安全 CPU 墓碑」用现有用户态 cgroup 即可继续做深；「完整墓碑」不要在本仓硬做 Binder freeze。
+**结论**：默认仍走安全 CPU 墓碑；**完整双冻（S2b）在本仓可行**，门闩默认关 → [`FULL_TOMBSTONE_FEASIBILITY.md`](FULL_TOMBSTONE_FEASIBILITY.md)。
 
 ## 期望状态机（权威）
 
@@ -26,6 +26,7 @@
 | **S0 Idle** | 黑名单空 | 不扫包、不冻；仅 start 日志 | ✅ OP12 已证 |
 | **S1 Fg-skip** | 名单 ∩ 前台 / fg 未知 | 不冻 | ⏳ 需非空名单验 |
 | **S2 Frozen** | 名单 ∩ 后台 ≥ delay；stop | `cgroup.freeze=1`（apps/ 或 uid_/） | ⏳ 代码有；日志未证 |
+| **S2b Full** | S2 + `allow-binder-freeze` | 先 `BINDER_FREEZE` 再 cgroup | 🔜 可行（OP12 探针 OK）；见 `FULL_TOMBSTONE_FEASIBILITY.md` |
 | **S3 Thaw** | 回前台 / 移出名单 / thaw | freeze=0 | ⏳ |
 | **S4 Hail** | allow-disable + disable | pm disable；失败熔断 | ❌ OP12 失败 → 仅 opt-in |
 | **S5 Circuit** | Binder 超预算 | 强制 stop | ✅ 已落地 |
@@ -51,11 +52,12 @@
 - **双路径**：`apps/uid_*`（OP12）+ `uid_*`（AOSP）  
 - `bgfreeze selfcheck` 打印 backend / 路径 / binder 不可用说明  
 
-### 明确不做（除非改产品边界）
+### 明确边界
 
-- Xposed / Re:Kernel / `BINDER_FREEZE` ioctl  
-- 全局冻全机第三方（非黑名单）  
-- ColorOS Hans 对抗（冲突时文档降级，不刷 OEM 补丁）
+- **`BINDER_FREEZE`**：可在本模块做（门闩默认关）→ 见 `FULL_TOMBSTONE_FEASIBILITY.md`；**不**依赖 Xposed/Re:Kernel  
+- 全局冻全机第三方（非黑名单）：不做  
+- ColorOS Hans 对抗：冲突时文档降级，不刷 OEM 补丁  
+- 改 AMS / 框架广播排队：不做
 
 ### 可选增强（有需求再开）
 

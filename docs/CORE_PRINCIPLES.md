@@ -48,23 +48,23 @@ AOSP 风格机器也可能是：
 
 这叫 **CPU 墓碑 / stop 模式**，不是把 App 从包管理器里禁用。
 
-## 4. 和「完整墓碑」差在哪
+## 4. 和「完整墓碑」差在哪（以及有没有机会）
 
 业界完整方案（AOSP CachedAppOptimizer）是：
 
-1. **先** Binder freeze（驱动里冻住 Binder，避免别人同步调用卡死/杀进程）  
+1. **先** Binder freeze（`ioctl(/dev/binder, BINDER_FREEZE)`）  
 2. **再** `cgroup.freeze`
 
-我们是 **纯 KernelSU 用户态模块**，摸不到 AMS 里的 `BINDER_FREEZE`，也没有 Xposed/Re:Kernel。  
-所以：
-
-| | 我们做的 | 完整墓碑 |
-|--|----------|----------|
+| | 当前默认 | 完整墓碑（驱动层） |
+|--|----------|-------------------|
 | CPU | ✅ cgroup.freeze | ✅ |
-| Binder | ❌ | ✅ |
-| 风险 | 冻住时若被同步 Binder 戳，对端可能异常/杀进程 | 更干净 |
+| Binder | ❌（未接线） | ✅ `BINDER_FREEZE` |
+| 风险 | 冻后 sync Binder 可能杀被冻进程 | 驱动直接回 `BR_FROZEN_REPLY` |
 
-**对外不要说「完整墓碑」**；说「黑名单后台 CPU 冻结」即可。
+**机会（2026-11 调研 + OP12 探针）**：root 用户态**可以直接**打 `BINDER_FREEZE`，**不必**改 AMS / Xposed。OP12 上对他 pid freeze/thaw 已成功。  
+→ 详细评估与分阶段计划：[`FULL_TOMBSTONE_FEASIBILITY.md`](FULL_TOMBSTONE_FEASIBILITY.md)。
+
+当前发版仍只宣传「黑名单后台 CPU 冻结」；Binder 双冻须门闩、默认关。
 
 ## 5. 系统怎么转起来
 
