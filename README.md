@@ -42,6 +42,7 @@ WebUI 可选两种冻结模式：
 
 - [docs/CORE_PRINCIPLES.md](docs/CORE_PRINCIPLES.md) — **核心原理**（机制 / 架构 / 安全边界）
 - [docs/FULL_TOMBSTONE_FEASIBILITY.md](docs/FULL_TOMBSTONE_FEASIBILITY.md) — 完整墓碑（Binder+cgroup）可行性与计划
+- [docs/VM_TEST_ENV.md](docs/VM_TEST_ENV.md) — Android 16 虚拟机/模拟器测环境选型
 - [docs/TOMBSTONE_PLAN.md](docs/TOMBSTONE_PLAN.md) — 墓碑期望状态机与实机结论
 - [AGENTS.md](AGENTS.md) — Agent **路由表**（短）；细节见嵌套 AGENTS / `docs/` / Skills
 - [docs/CLOUD_RELEASE.md](docs/CLOUD_RELEASE.md) — 云朵合规台账

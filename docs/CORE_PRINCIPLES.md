@@ -1,7 +1,7 @@
 # 核心原理（给人看）
 
 > ksu-bgfreeze 是什么、靠什么冻、为什么敢开、边界在哪。  
-> 状态机细节 → [`TOMBSTONE_PLAN.md`](TOMBSTONE_PLAN.md) · 业界对照 → [`INDUSTRY_COMPARE.md`](INDUSTRY_COMPARE.md) · 安全高压线 → [`SYSTEMS_PROGRAMMING_REVIEW.md`](SYSTEMS_PROGRAMMING_REVIEW.md)
+> 状态机细节 → [`TOMBSTONE_PLAN.md`](TOMBSTONE_PLAN.md) · 完整墓碑可行性 → [`FULL_TOMBSTONE_FEASIBILITY.md`](FULL_TOMBSTONE_FEASIBILITY.md) · 虚拟机测环境 → [`VM_TEST_ENV.md`](VM_TEST_ENV.md) · 业界对照 → [`INDUSTRY_COMPARE.md`](INDUSTRY_COMPARE.md) · 安全高压线 → [`SYSTEMS_PROGRAMMING_REVIEW.md`](SYSTEMS_PROGRAMMING_REVIEW.md)
 
 ## 1. 要解决什么
 

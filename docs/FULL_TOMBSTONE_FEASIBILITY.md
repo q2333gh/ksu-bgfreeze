@@ -90,7 +90,8 @@ OP12 现场：`use_freezer=true`，`CONFIG_ANDROID_BINDER_IPC=y`，`CONFIG_CGROU
 
 ## 7. 下一步（需你拍板）
 
-1. **同意 Phase 1**：默认关的 `allow-binder-freeze` + daemon 双冻路径 → 升号实装  
-2. 或先只做 **selfcheck 探针进正式包**，再开 Phase 1  
+1. **先上虚拟机 L1/L2**（推荐 PC AVD Android 16）→ 见 [`VM_TEST_ENV.md`](VM_TEST_ENV.md)；**默认不再用 OP12 做破坏性探针**  
+2. VM 绿后再 **Phase 1**：`allow-binder-freeze`（默认关）+ daemon 双冻 → 升号  
+3. 或先把 **selfcheck 探针**打进包（只读，仍安全）  
 
-建议：先 1（门闩默认关，风险可控）。
+建议顺序：VM 环境 → Phase 1（门闩默认关）→ OP12 冒烟。

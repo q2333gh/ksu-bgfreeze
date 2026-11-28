@@ -18,6 +18,7 @@ KernelSU 黑名单后台冻结模块。人类总览：`README.md`。
 |------|------|
 | **核心原理（人读）** | `docs/CORE_PRINCIPLES.md` |
 | **完整墓碑可行性** | `docs/FULL_TOMBSTONE_FEASIBILITY.md`（Binder+cgroup） |
+| **虚拟机测环境** | `docs/VM_TEST_ENV.md`（AVD/redroid；避 OP12 破坏性测） |
 | Rust daemon | `daemon/AGENTS.md` → `daemon/src/` |
 | 模块 / WebUI / shell | `module/AGENTS.md` |
 | 发版一页纸 | `docs/workflows/ship.md` |
