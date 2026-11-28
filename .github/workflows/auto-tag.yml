@@ -61,5 +61,6 @@ jobs:
           git push origin "refs/tags/${tag}"
 
           # Tag pushes authenticated as GITHUB_TOKEN do not start other workflows.
+          # Workflow file is Release.yml (case-sensitive on Linux runners).
           gh workflow run Release.yml --ref "${tag}" -f dry_run=false
           echo "Pushed ${tag} and dispatched Release workflow"

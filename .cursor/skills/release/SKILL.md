@@ -36,9 +36,10 @@ Action pin（勿随意升级）：
 4. Commit + push Origin `main`；sync same tip to GitHub `main`（`daily_env1` if needed）。
 5. Watch Actions：
    - **Precheck** green
-   - **Auto Tag** creates `vX.Y.Z` then **`gh workflow run Release`**（`GITHUB_TOKEN` 推的 tag **不会**自动触发其它 workflow，必须靠这一步）
+   - **Auto Tag** 打 **lightweight** `v*`（勿 annotated），再 `gh workflow run Release.yml --ref tag`（`GITHUB_TOKEN` 推 tag 不会连锁；annotated + 改 workflows 的 commit 会导致 Release `POST /releases` 403）
    - **Release** green → asset `ksu-bgfreeze-N-vX.Y.Z.zip`
    - Auto Tag skip（versionCode 未升高）≠ 已发版
+   - Workflow 文件名是 **`Release.yml`**（大小写敏感）
 6. Verify：
 
 ```bash
