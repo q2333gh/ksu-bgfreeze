@@ -1,8 +1,44 @@
 #!/usr/bin/env bash
-# Cross-build static aarch64 musl binary into module/bin/bgfreeze
+# Cross-build aarch64 daemon into module/bin/bgfreeze.
+# Prefer Android NDK (CI / ANDROID_NDK_HOME). Fallback: musl.cc toolchain via CROSS_ROOT.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+install_bin() {
+  local out="$1"
+  install -m 755 "$out" "$ROOT/module/bin/bgfreeze"
+  file "$ROOT/module/bin/bgfreeze"
+  ls -lh "$ROOT/module/bin/bgfreeze"
+  echo "installed: module/bin/bgfreeze"
+}
+
+# ---- Android NDK path (GitHub Actions / local SDK) ----
+if [[ -n "${ANDROID_NDK_HOME:-}" && -d "${ANDROID_NDK_HOME}" ]]; then
+  TARGET=aarch64-linux-android
+  API="${ANDROID_API:-24}"
+  PREBUILT="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64"
+  if [[ ! -d "$PREBUILT" ]]; then
+    # macOS host
+    PREBUILT="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/darwin-x86_64"
+  fi
+  CC="${PREBUILT}/bin/aarch64-linux-android${API}-clang"
+  AR="${PREBUILT}/bin/llvm-ar"
+  if [[ ! -x "$CC" ]]; then
+    echo "error: NDK clang missing: $CC" >&2
+    exit 1
+  fi
+  export CC_aarch64_linux_android="$CC"
+  export AR_aarch64_linux_android="$AR"
+  export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CC"
+  export CARGO_TARGET_AARCH64_LINUX_ANDROID_AR="$AR"
+  cd "$ROOT/daemon"
+  rustup target add "$TARGET" >/dev/null
+  cargo build --release --target "$TARGET"
+  install_bin "$ROOT/daemon/target/${TARGET}/release/bgfreeze"
+  exit 0
+fi
+
+# ---- musl.cc fallback (local) ----
 TARGET=aarch64-unknown-linux-musl
 CROSS_ROOT="${CROSS_ROOT:-}"
 if [[ -z "$CROSS_ROOT" ]]; then
@@ -18,7 +54,7 @@ if [[ -z "$CROSS_ROOT" ]]; then
 fi
 
 if [[ -z "${CROSS_ROOT}" || ! -x "${CROSS_ROOT}/bin/aarch64-linux-musl-gcc" ]]; then
-  echo "error: aarch64-linux-musl-gcc not found. Set CROSS_ROOT or install musl.cc toolchain." >&2
+  echo "error: set ANDROID_NDK_HOME or CROSS_ROOT (aarch64-linux-musl-gcc)." >&2
   exit 1
 fi
 
@@ -29,8 +65,4 @@ export PATH="${CROSS_ROOT}/bin:${PATH}"
 cd "$ROOT/daemon"
 rustup target add "$TARGET" >/dev/null
 cargo build --release --target "$TARGET"
-OUT="$ROOT/daemon/target/${TARGET}/release/bgfreeze"
-install -m 755 "$OUT" "$ROOT/module/bin/bgfreeze"
-file "$ROOT/module/bin/bgfreeze"
-ls -lh "$ROOT/module/bin/bgfreeze"
-echo "installed: module/bin/bgfreeze"
+install_bin "$ROOT/daemon/target/${TARGET}/release/bgfreeze"

@@ -18,22 +18,23 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-unknown-linux-musl
+          targets: aarch64-linux-android
 
-      - name: Install aarch64 musl cross linker
-        run: |
-          set -euo pipefail
-          curl -fsSL https://musl.cc/aarch64-linux-musl-cross.tgz \
-            | tar -xz -C /tmp
-          echo "CROSS_ROOT=/tmp/aarch64-linux-musl-cross" >> "$GITHUB_ENV"
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27c
+          link-to-sdk: false
 
-      - name: Build Rust daemon (static aarch64)
+      - name: Build Rust daemon (aarch64-linux-android)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           set -euo pipefail
           bash scripts/build-daemon.sh
           test -x module/bin/bgfreeze
           file module/bin/bgfreeze | grep -E 'ARM aarch64|aarch64'
-          file module/bin/bgfreeze | grep -qi 'statically linked'
 
       - name: Validate module layout and module.yaml
         run: |

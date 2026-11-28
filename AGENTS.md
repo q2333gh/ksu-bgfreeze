@@ -12,7 +12,7 @@
 | 官方发版文档 | https://developers.kernelsu.org/docs/zh-CN/releasing |
 | 官方上架文档 | https://developers.kernelsu.org/docs/zh-CN/getting-started |
 
-本工作区若是 Origin 镜像，**发版与 Actions 以 GitHub 仓为准**。本机无 `gh` 凭证时，用已授权的 `daily_env1` 环境推送到 `q2333gh/ksu-bgfreeze`，不要假设当前 shell 能直接 `gh release` / `git push` GitHub。
+本工作区若是 Origin 镜像，**发版与 Actions 以 GitHub 仓为准**。本机无 `gh` 凭证时，用已授权的 **`daily_env1`** 环境推送到 `q2333gh/ksu-bgfreeze`：该环境**已有可用的 GitHub token / `gh` 登录**，子 Agent 应直接 `gh auth status` 后 `git push` / `gh`，不要再向用户要 token，也不要假设当前 Origin VM shell 能直接 `gh release`。
 
 ## 硬约束（违反会浪费 versionCode / tag）
 
@@ -25,17 +25,67 @@
 7. **不要**改已上架的 `id`；不要把 zip 上传到 modules.kernelsu.org（云朵只索引 GitHub immutable release）。
 8. **不要**新建 PR 来完成发版；发版是 push `main` + push `v*` tag。
 
+## 硬约束：系统级编程安全（privileged daemon —— 违反可锁机 / Watchdog）
+
+本模块是 **Android/Linux 特权用户态系统编程**（root 常驻、扫 `/proc`、`kill`、经 `am`/`pm` 打 Binder），**不是**普通 App。改 `daemon/`、`module/bin/`、启动脚本、冻结语义前必须遵守；做 code review / 架构改动时先读本节，不够再打开下方「长手册」。
+
+详细审查与缺口对照见 [`docs/SYSTEMS_PROGRAMMING_REVIEW.md`](docs/SYSTEMS_PROGRAMMING_REVIEW.md)；Big-O 见 [`docs/BIG_O_ANALYSIS.md`](docs/BIG_O_ANALYSIS.md)。
+
+### 强制准则（默认必须遵守）
+
+1. **失败默认安全**：不确定就不冻结 / 不 `pm disable`；Binder/`pm`/`am` 失败 → **立刻熔断**（写 `circuit.open`、回落 `mode=stop`），**禁止**紧循环重试或「再试几次」拖垮 `system_server`。
+2. **单实例**：daemon 必须以 `flock`（或等价互斥）为唯一权威；抢不到锁 → 退出。禁止靠 pidfile  alone 防双开；禁止 `pkill -f` 误伤无关进程。
+3. **作用域最小**：只动黑名单包对应 **app uid（≥10000）**；永不对 `uid<10000`、SystemUI/电话/输入法/启动器/OEM 核心/`pm disable` 关键前缀列表动手。`disable` 模式默认关；开机无 `allow-disable-on-boot` 时强制 `mode=stop`。
+4. **PID TOCTOU**：凡对 pid 发信号或写入 cgroup，**使用前必须再确认该 pid 仍属目标 uid**（或改用按 uid 的 `cgroup.freeze`，避免按 pid 操作）。禁止「扫一遍 `/proc` 后无复核就 `kill`」。
+5. **Binder / IPC 预算**：对 `dumpsys` / `am` / `pm` 设硬上限——每轮至多有限次数；子进程必须有 **超时 + 输出字节帽**；exec 用 **绝对路径**（如 `/system/bin/pm`）。禁止热路径 shell 循环、`awk` 每 pid、每包一次全表 `ps`。
+6. **热路径复杂度**：进程枚举每轮 **Θ(T) 一次** 共享快照（或更优的 uid cgroup / 事件驱动）；黑名单决策 **Θ(N+P)**。禁止回退到 **Θ(N·T)** 全表×每包扫描或 per-pid fork。
+7. **可杀、可回滚、可观测**：保留模块 `disable`、`panic`、emergency thaw；每次强制副作用打结构化日志（pkg/uid/pid/rc/binder_fail）；离开 `disable` 模式必须 revive。
+8. **冻结原语升级纪律**：SIGSTOP → cgroup freezer →（可选）Binder freeze 必须 **分步、可关、可回退**；不得在未熔断/未 kill-switch 的情况下引入新的全机副作用路径。完整墓碑语义见 AOSP/Freezeit：**freezer + binder freeze**；我们未具备后者时不得宣称「完整冻结」。
+
+### 何时打开长手册 / 外链（需要更多准则或做 review 时）
+
+| 场景 | 先读仓库内 | 再读外链 |
+|------|------------|----------|
+| 改 daemon / 信号 / `/proc` / 锁 | `docs/SYSTEMS_PROGRAMMING_REVIEW.md` | TLDP Race/TOCTOU（下表） |
+| 引入或评审 cgroup 冻结 | 同上 §C7 + OP12 路径备注 | Kernel cgroup v2 freezer |
+| Binder/`pm`/`am` 或「会不会再次卡死」 | 事故文 `docs/INCIDENT_*` + Review §C3 | AOSP Cached apps freezer |
+| 复杂度 / 性能回归 review | `docs/BIG_O_ANALYSIS.md` | — |
+| 对照业界墓碑实现 | Review §业界对照 | Freezeit 文档；Hail README |
+
+**外链（权威 / 长手册）——Agent 在 review 或设计新冻结路径时按需深入：**
+
+- TLDP Secure Programming HOWTO — Race Conditions / TOCTOU：https://tldp.org/HOWTO/Secure-Programs-HOWTO/avoid-race.html
+- Linux 内核文档 — cgroup v2（`cgroup.freeze`）：https://docs.kernel.org/admin-guide/cgroup-v2.html
+- Linux 内核文档 — cgroup v1 freezer（SIGSTOP 为何不够）：https://docs.kernel.org/admin-guide/cgroup-v1/freezer-subsystem.html
+- AOSP — Cached apps freezer：https://source.android.com/docs/core/perf/cached-apps-freezer
+- man kill(2)：https://man7.org/linux/man-pages/man2/kill.2.html
+- man signal(7)：https://man7.org/linux/man-pages/man7/signal.7.html
+- Hail（pm disable / 工作模式，非进程 freezer）：https://github.com/aistra0528/Hail/blob/master/README.zh_CN.md
+- Freezeit 实践说明（V1/V2/SIGSTOP 与 Binder freeze 陷阱）：https://jark006.github.io/Freezeit/
+
+**Review 检查清单（改动涉及进程控制或 Binder 时，回复用户前自检）：**
+
+- [ ] 有无新的每 pid / 每包全表扫描或重试风暴？
+- [ ] `kill`/cgroup 写入前是否复核身份或按 uid 作用？
+- [ ] 失败是否 fail-fast + 熔断，而非盲重试？
+- [ ] 是否仍保持 flock、kill-switch、默认 `stop`？
+- [ ] 日志能否定位误伤包 / binder 失败？
+
 ## 目录与 CI
 
 ```
+daemon/                 # Rust 源码（bgfreeze）；交叉编译 → module/bin/bgfreeze
 module/                 # ZIP 根内容（module.prop、service.sh、webroot/…）
 module.yaml             # 云朵元数据；description → README.md
 CHANGELOG.md            # Release notes（CI 读这个）
 scripts/pack.sh         # 本地打包 → dist/；不发版
+scripts/build-daemon.sh # aarch64 musl 交叉编译 daemon
 .github/workflows/
-  release.yml           # push tags v* → 官方 module-release（pin SHA）
-  precheck.yml          # main/PR：prop/yaml 一致 + pack.sh
+  release.yml           # push tags v* → 官方 module-release（pin SHA）；先编 Rust
+  precheck.yml          # main/PR：编 Rust + prop/yaml + pack.sh（ubuntu-latest）
 docs/CLOUD_RELEASE.md   # 云朵流程合规台账（给人看）
+docs/SYSTEMS_PROGRAMMING_REVIEW.md  # 系统级安全审查（Agent 强制准则的长文）
+docs/BIG_O_ANALYSIS.md  # 关键路径复杂度
 ```
 
 `release.yml` 固定使用：
@@ -173,9 +223,24 @@ updateJson=https://modules.kernelsu.org/api/v1/modules/ksu-bgfreeze/update.json
 | Precheck 红 | 看 prop/yaml/`pack.sh`；与云朵 version 比较无关 |
 | 只有 Origin 有提交 | 同步到 GitHub `main` 再打 tag |
 
+## 冻结语义（Agent 勿回退）
+
+- 默认 **`mode=stop`**：黑名单包退后台 ≥3s 后，对该 uid 进程 `SIGSTOP`（Rust `module/bin/bgfreeze`）；前台 `SIGCONT`
+- **`mode=disable`**（Hail）：单次 `am force-stop` + `pm disable` + 校验；失败 cooldown / circuit；**禁止**重试风暴与 SIGSTOP 兜底洪水
+- 每轮 **一次** 进程快照（Θ(T)），禁止 per-pid awk / 每包全表 `ps`
+- 对方保活拉起记 **`WAKE`**；控制器是 `bgfreeze`（`bgfreeze-daemon.sh` 仅兼容启动器）
+- 日志：`/data/local/tmp/ksu-bgfreeze.log`（`apps.sh log`）
+
+## WebUI 性能（Agent 勿回退）
+
+- **禁止**对每个包各跑一次 `dumpsys package`（曾导致 ~20s）
+- 列表：一次 `dumpsys package` → `labels.cache`（24h）+ `pm list packages -3`
+- 图标：列表先渲染；`ICON_CONCURRENCY=2` 排队拉取
+
 ## 改代码时的默认习惯
 
-- 功能改动落在 `module/`；用户说明落在 `README.md` / `docs/`
-- WebUI：`module/webroot/`；守护进程：`module/bin/bgfreeze-daemon.sh`
+- 功能改动：Rust 在 `daemon/`，打包产物 `module/bin/bgfreeze`；胶水/WebUI 在 `module/`；说明在 `README.md` / `docs/`
+- 改进程控制或 Binder 路径时：**先满足「硬约束：系统级编程安全」**，再提交；需要论据或做 review 时打开该节「长手册 / 外链」
 - 保持黑名单-only：名单外零干预
 - 发版相关流程变更时，同步更新本文件与 `docs/CLOUD_RELEASE.md`
+- 交叉编译：`bash scripts/build-daemon.sh`（需 aarch64-linux-musl）；CI 在 `ubuntu-latest` 上同样执行
