@@ -1,0 +1,8 @@
+# Language stats: count Rust sources; ignore packaging blobs.
+*.rs linguist-language=Rust
+*.toml linguist-language=TOML
+
+dist/** linguist-generated=true
+module/bin/bgfreeze binary
+module/bin/bgfreeze linguist-vendored=true
+module/webroot/icons/** linguist-generated=true
