@@ -127,3 +127,34 @@ powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\12531\bgfreeze-avd\
 ```
 
 OP12 仍只做已绿包冒烟；破坏性探针默认走本 AVD。
+
+## 8. Snapshot / Checkpoint（要不要）
+
+**要。** 官方 Emulator 已支持，不必另搞一套：
+
+| 类型 | 用途 |
+|------|------|
+| **Quick Boot `default_boot`** | 关机自动存；日常快启 |
+| **Named snapshot**（推荐当 checkpoint） | `adb emu avd snapshot save <name>` / `load <name>` |
+| **Cold boot** | `-no-snapshot-load`（改 ramdisk / KernelSU 后必须） |
+
+Y9 已建：
+
+| TAG | 含义 |
+|-----|------|
+| `clean-pre-ksu` | 干净 API36 + 尚未打 KSU |
+| `with-apis-and-module` | 已装 ApiDemos + 解压 `ksu-bgfreeze` 到 `/data/adb/modules/` |
+
+建议：破坏实验前 `save`，失败后 `load`；改系统镜像后旧 snap 会失效。
+
+## 9. 实装结果（2026-11-28）
+
+| 步骤 | 结果 |
+|------|------|
+| 装测试 APK `io.appium.android.apis` | ✅ `adb install` Success |
+| KernelSU Next AVD（`ymuuuu/KernelSU-Next-AVD`）打 ramdisk | ⚠️ 补丁成功；**冷启动 Kernel panic**（`Missing ENDBR: my_x64_sys_call` / CET） |
+| 恢复 `ramdisk.img.backup` | ✅ 模拟器恢复可 boot |
+| 装本模块 zip（`v0.6.8`）到 `/data/adb/modules/ksu-bgfreeze` | ✅ 文件就位；`bgfreeze selfcheck` → `backend=cgroup-uid` `apps_hierarchy=true` |
+| 真·KernelSU 模块生命周期（`ksud` 开机拉 `service.sh`） | ❌ 依赖可用的 KSU；当前 LKM 与本 AVD 内核不兼容 |
+
+**结论**：AVD 可当 L1/L2 靶机（cgroup + daemon）；**完整 KernelSU 模块路径**需等兼容 x86_64 LKM（ENDBR）或改用 Magisk / 真机 OP12。已把 `ramdisk` 恢复为 stock。

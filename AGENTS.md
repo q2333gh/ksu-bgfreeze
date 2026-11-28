@@ -60,7 +60,7 @@ bash scripts/hot-update.sh              # 打印机内完整 zip 热更步骤
 
 | 通道 | 用途 | 状态（2026-11-28 已验） |
 |------|------|-------------------------|
-| **PC Y9 `pc_y9win11mcp`** | Android 16 AVD 宿主；L1/L2 探针与 daemon 试验 | ✅ `bgfreeze-a16`（API 36 Google APIs x86_64）；`adb -s emulator-5554` 可 root；详见 `docs/VM_TEST_ENV.md` §Verified |
+| **PC Y9 `pc_y9win11mcp`** | Android 16 AVD 宿主；L1/L2 探针与 daemon 试验 | ✅ `bgfreeze-a16`；`adb root`；**snapshot**：`clean-pre-ksu` / `with-apis-and-module`；KSU-Next LKM 因 ENDBR panic 未上（已恢复 stock ramdisk）；模块文件可解压到 `/data/adb/modules/` 跑 `selfcheck`。详见 `docs/VM_TEST_ENV.md` §8–9 |
 | **OP12 `phone_op12_termux`** | 发版后冒烟 / ColorOS 路径 | 仅已绿包；**禁止**破坏性双冻实验（默认） |
 | **daily_env1** | Origin→GitHub 同步 | 非 Android 靶机 |
 
