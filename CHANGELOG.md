@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.5.1
+
+- Industry compare doc; `mode=stop` prefers **cgroup uid freeze** (OP12 `apps/uid_*`), then `/dev/freezer`, then SIGSTOP
+- SIGSTOP/cgroup.procs: **uid re-check before act** (TOCTOU)
+- Absolute paths for `am`/`pm`/`dumpsys`
+- See `docs/INDUSTRY_COMPARE.md`
+
 ## v0.5.0
 
 - **Architecture: Rust daemon** (`module/bin/bgfreeze`, static aarch64 musl)

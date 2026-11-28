@@ -7,6 +7,7 @@
 //! - disable verify: Θ(D) once per poll (one `pm list -d`)
 
 mod config;
+mod freezer;
 mod hail;
 mod lock;
 mod logutil;
@@ -21,6 +22,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use config::{Mode, Paths, Settings};
+use freezer::Backend;
 use hail::{apply_disable, is_binder_fail, is_critical, list_disabled, revive};
 use lock::DaemonLock;
 use logutil::Logger;
@@ -101,10 +103,12 @@ fn run_daemon() -> io::Result<()> {
     fs::write(&paths.pidfile, format!("{}\n", std::process::id()))?;
 
     let mut settings = Settings::load(&paths)?;
+    let backend = freezer::detect();
     log.write(&format!(
-        "start pid={} mode={:?} poll={}s delay={}s rust=1 big_o=O(T)+O(N+P)",
+        "start pid={} mode={:?} backend={} poll={}s delay={}s rust=1 big_o=O(T)|O(1uid)",
         std::process::id(),
         settings.mode,
+        backend.as_str(),
         POLL.as_secs(),
         DELAY.as_secs()
     ))?;
@@ -204,6 +208,7 @@ fn run_daemon() -> io::Result<()> {
                         uid,
                         &fg,
                         &snap,
+                        backend,
                         &mut bg_since,
                         &mut tombstone,
                         &mut frozen,
@@ -320,6 +325,7 @@ fn tick_stop(
     uid: u32,
     fg: &Option<String>,
     snap: &ProcSnap,
+    backend: Backend,
     bg_since: &mut HashMap<String, u64>,
     tombstone: &mut HashSet<String>,
     frozen: &mut HashSet<String>,
@@ -339,9 +345,12 @@ fn tick_stop(
     if fg.as_deref() == Some(pkg) {
         bg_since.remove(pkg);
         if frozen.remove(pkg) {
-            let n = us.cont_all();
+            let n = freezer::thaw_uid(backend, uid, us).unwrap_or(0);
             let _ = fs::remove_file(paths.data.join(format!("frozen.{pkg}")));
-            log.write(&format!("thaw {pkg} uid={uid} cont={n}"))?;
+            log.write(&format!(
+                "thaw {pkg} uid={uid} backend={} n={n}",
+                backend.as_str()
+            ))?;
         }
         return Ok(());
     }
@@ -351,29 +360,48 @@ fn tick_stop(
         return Ok(());
     }
 
-    let added = us.stop_running();
-    if !frozen.contains(pkg) {
-        frozen.insert(pkg.to_string());
-        let _ = fs::write(paths.data.join(format!("frozen.{pkg}")), b"1\n");
-        last_watch.insert(pkg.to_string(), Instant::now());
-        log.write(&format!("freeze {pkg} uid={uid} stopped={added}"))?;
-    } else if added > 0 {
-        last_watch.insert(pkg.to_string(), Instant::now());
-        log.write(&format!("WAKE {pkg} uid={uid} new={added}"))?;
-    } else {
-        let due = last_watch
-            .get(pkg)
-            .map(|t| t.elapsed() >= WATCH_EVERY)
-            .unwrap_or(true);
-        if due {
-            log.write(&format!(
-                "watch {pkg} uid={uid} total={} T={}",
-                us.pids.len(),
-                us.stopped_count()
-            ))?;
+    // Already marked frozen: detect WAKE
+    if frozen.contains(pkg) {
+        let woke = match backend {
+            Backend::CgroupUid => !freezer::is_cgroup_frozen(uid) && !us.pids.is_empty(),
+            _ => {
+                let running = us.pids.iter().filter(|(_, s)| *s != 'T').count();
+                running > 0
+            }
+        };
+        if woke {
+            let n = freezer::freeze_uid(backend, uid, us).unwrap_or(0);
             last_watch.insert(pkg.to_string(), Instant::now());
+            log.write(&format!(
+                "WAKE {pkg} uid={uid} backend={} refreeze={n}",
+                backend.as_str()
+            ))?;
+        } else {
+            let due = last_watch
+                .get(pkg)
+                .map(|t| t.elapsed() >= WATCH_EVERY)
+                .unwrap_or(true);
+            if due {
+                log.write(&format!(
+                    "watch {pkg} uid={uid} backend={} total={} T={}",
+                    backend.as_str(),
+                    us.pids.len(),
+                    us.stopped_count()
+                ))?;
+                last_watch.insert(pkg.to_string(), Instant::now());
+            }
         }
+        return Ok(());
     }
+
+    let added = freezer::freeze_uid(backend, uid, us).unwrap_or(0);
+    frozen.insert(pkg.to_string());
+    let _ = fs::write(paths.data.join(format!("frozen.{pkg}")), b"1\n");
+    last_watch.insert(pkg.to_string(), Instant::now());
+    log.write(&format!(
+        "freeze {pkg} uid={uid} backend={} n={added}",
+        backend.as_str()
+    ))?;
     Ok(())
 }
 
@@ -435,7 +463,7 @@ fn foreground_pkg(cache: &mut (Option<String>, Instant)) -> Option<String> {
     if cache.1.elapsed() < FG_CACHE {
         return cache.0.clone();
     }
-    let out = Command::new("dumpsys")
+    let out = Command::new("/system/bin/dumpsys")
         .args(["activity", "activities"])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

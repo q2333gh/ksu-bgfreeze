@@ -225,7 +225,7 @@ updateJson=https://modules.kernelsu.org/api/v1/modules/ksu-bgfreeze/update.json
 
 ## 冻结语义（Agent 勿回退）
 
-- 默认 **`mode=stop`**：黑名单包退后台 ≥3s 后，对该 uid 进程 `SIGSTOP`（Rust `module/bin/bgfreeze`）；前台 `SIGCONT`
+- 默认 **`mode=stop`**：黑名单退后台 ≥3s 后冻结（Rust `module/bin/bgfreeze`）——**优先** `cgroup.freeze`（uid），否则 `/dev/freezer`，否则 `SIGSTOP`（杀前复核 uid）；前台解冻
 - **`mode=disable`**（Hail）：单次 `am force-stop` + `pm disable` + 校验；失败 cooldown / circuit；**禁止**重试风暴与 SIGSTOP 兜底洪水
 - 每轮 **一次** 进程快照（Θ(T)），禁止 per-pid awk / 每包全表 `ps`
 - 对方保活拉起记 **`WAKE`**；控制器是 `bgfreeze`（`bgfreeze-daemon.sh` 仅兼容启动器）

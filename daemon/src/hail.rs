@@ -47,7 +47,7 @@ pub fn is_binder_fail(msg: &str) -> bool {
 }
 
 fn current_user() -> u32 {
-    let out = Command::new("am")
+    let out = Command::new("/system/bin/am")
         .arg("get-current-user")
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -64,7 +64,7 @@ fn current_user() -> u32 {
 
 /// Θ(D) — one binder call, returns HashSet of disabled packages.
 pub fn list_disabled() -> io::Result<HashSet<String>> {
-    let out = Command::new("pm")
+    let out = Command::new("/system/bin/pm")
         .args(["list", "packages", "-d"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -95,7 +95,7 @@ pub fn apply_disable(pkg: &str) -> io::Result<()> {
     }
     let uid = current_user();
 
-    let fs_out = Command::new("am")
+    let fs_out = Command::new("/system/bin/am")
         .args(["force-stop", "--user", &uid.to_string(), pkg])
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -108,7 +108,7 @@ pub fn apply_disable(pkg: &str) -> io::Result<()> {
         ));
     }
 
-    let pm_out = Command::new("pm")
+    let pm_out = Command::new("/system/bin/pm")
         .args(["disable", "--user", &uid.to_string(), pkg])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -145,12 +145,12 @@ pub fn apply_disable(pkg: &str) -> io::Result<()> {
 
 pub fn revive(pkg: &str) -> io::Result<()> {
     let uid = current_user();
-    let _ = Command::new("pm")
+    let _ = Command::new("/system/bin/pm")
         .args(["enable", "--user", &uid.to_string(), pkg])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
-    let _ = Command::new("pm")
+    let _ = Command::new("/system/bin/pm")
         .args(["unsuspend", "--user", &uid.to_string(), pkg])
         .stdout(Stdio::null())
         .stderr(Stdio::null())

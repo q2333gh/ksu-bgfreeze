@@ -120,11 +120,11 @@ stdout/stderr  unbounded：极端 dumpsys 输出应设超时与字节上限。
 | fail-fast + circuit | ✅（disable 路径） |
 | 默认 stop / 模块 disable | ✅ 运维层 |
 | 关键包前缀拒绝 | ✅ 不完整 |
-| PID 使用前 uid 复核 | ❌ |
-| dumpsys 超时/字节帽 | ❌ |
+| PID 使用前 uid 复核 | ✅ v0.5.1 |
+| dumpsys 超时/字节帽 | ❌（仍欠） |
 | Binder 每秒配额 | ❌（仅失败熔断） |
-| 绝对路径 exec | ❌ |
-| cgroup freezer | ❌（OP12 上 `/sys/fs/cgroup/apps/uid_*/cgroup.freeze` 与 `/dev/freezer` 可用） |
+| 绝对路径 exec | ✅ v0.5.1 |
+| cgroup freezer | ✅ v0.5.1 优先 `apps/uid_*/cgroup.freeze` |
 | Binder freeze | ❌（需驱动/框架，超出当前模块） |
 
 ---

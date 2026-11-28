@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Default, Clone)]
 pub struct ProcSnap {
@@ -21,10 +21,14 @@ impl UidSnap {
         self.pids.iter().filter(|(_, s)| *s == 'T').count()
     }
 
-    pub fn stop_running(&self) -> usize {
+    /// SIGSTOP only if /proc/pid still belongs to `want_uid` (TOCTOU harden).
+    pub fn stop_running_checked(&self, want_uid: u32) -> usize {
         let mut n = 0;
         for &(pid, st) in &self.pids {
             if st == 'T' {
+                continue;
+            }
+            if pid_uid(pid) != Some(want_uid) {
                 continue;
             }
             if signal(pid, libc::SIGSTOP) {
@@ -34,9 +38,12 @@ impl UidSnap {
         n
     }
 
-    pub fn cont_all(&self) -> usize {
+    pub fn cont_all_checked(&self, want_uid: u32) -> usize {
         let mut n = 0;
         for &(pid, _) in &self.pids {
+            if pid_uid(pid) != Some(want_uid) {
+                continue;
+            }
             if signal(pid, libc::SIGCONT) {
                 n += 1;
             }
@@ -46,8 +53,14 @@ impl UidSnap {
 }
 
 fn signal(pid: i32, sig: i32) -> bool {
-    // SAFETY: kill is the intended process control API.
+    // SAFETY: kill is the intended process control API for freezer daemon.
     unsafe { libc::kill(pid, sig) == 0 }
+}
+
+/// Re-read Uid from /proc/pid/status. None if gone or unreadable.
+pub fn pid_uid(pid: i32) -> Option<u32> {
+    let path = PathBuf::from(format!("/proc/{pid}/status"));
+    parse_status(&path).map(|(u, _)| u)
 }
 
 /// Walk /proc/[pid]/status once. Complexity Θ(T).
