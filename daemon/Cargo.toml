@@ -1,0 +1,17 @@
+[package]
+name = "bgfreeze"
+version = "0.5.0"
+edition = "2021"
+description = "KSU bgfreeze daemon — O(T) proc snapshot, fail-fast hail"
+license = "MIT"
+publish = false
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[dependencies]
+libc = "0.2"

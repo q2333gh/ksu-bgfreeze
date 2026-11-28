@@ -19,6 +19,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-musl
+
+      - name: Install aarch64 musl cross linker
+        run: |
+          set -euo pipefail
+          curl -fsSL https://musl.cc/aarch64-linux-musl-cross.tgz \
+            | tar -xz -C /tmp
+          echo "CROSS_ROOT=/tmp/aarch64-linux-musl-cross" >> "$GITHUB_ENV"
+
+      - name: Build Rust daemon (static aarch64)
+        run: |
+          set -euo pipefail
+          bash scripts/build-daemon.sh
+          test -x module/bin/bgfreeze
+          file module/bin/bgfreeze | grep -E 'ARM aarch64|aarch64'
+
       - name: Publish KernelSU module
         uses: KernelSU-Modules/tools/actions/module-release@424471eacf6c0bd00e8e3708980f6b1882b5bf33
         with:

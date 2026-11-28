@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.5.0
+
+- **Architecture: Rust daemon** (`module/bin/bgfreeze`, static aarch64 musl)
+- Big-O: per-poll **Θ(T)** `/proc` snapshot → `uid→pids`; blacklist walk **Θ(N+P)** (was **Θ(N·T)**)
+- packages.list HashMap O(1) lookup; `pm list -d` once/poll in disable mode
+- Shell reduced to boot glue + WebUI `apps.sh`; no shell fallback loop
+- See `docs/BIG_O_ANALYSIS.md`
+
+## v0.4.1
+
+- Fail-fast: one `pm disable` + one verify; binder failure opens circuit → `mode=stop`
+- Per-pkg failure cooldown (10 min); no retry/SIGSTOP storm after hail fail
+- Single-instance `flock` on daemon.lock
+- Process scan: one `grep -l` over `/proc/*/status` (no per-pid awk fork bomb)
+- `circuit-status` / `circuit-clear` helpers
+
+## v0.4.0
+
+- Hail-style freeze: whole-package `am force-stop` + `pm disable --user` (no component flood)
+- WebUI: mode label + 「打开」= enable and launch (Hail LAUNCH)
+- Daemon watches disabled state; re-force-stops leaked processes
+
 ## v0.3.1
 
 - Immutable release for KernelSU Modules catalog

@@ -2,28 +2,47 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>后台冻结 · 黑名单</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>后台冻结</title>
+  <link rel="stylesheet" href="style.css?v=400" />
 </head>
-<body>
-  <header>
+<body data-ui="400">
+  <div id="app">
     <h1>后台冻结</h1>
-    <p class="sub">只有勾选的应用会在退后台后被冻结。其它应用不受影响。</p>
-  </header>
+    <p id="hint" class="hint">勾选要冻结的应用，选模式后点「应用名单」。</p>
 
-  <div class="toolbar">
-    <input id="q" type="search" placeholder="搜索名称或包名" autocomplete="off" />
+    <fieldset class="box">
+      <legend>冻结模式</legend>
+      <label class="opt">
+        <input type="radio" name="mode" id="modeStop" value="stop" checked />
+        <span>SIGSTOP（暂停进程）</span>
+      </label>
+      <label class="opt">
+        <input type="radio" name="mode" id="modeDisable" value="disable" />
+        <span>Hail 停用（整包 pm disable）</span>
+      </label>
+      <button type="button" id="btnMode" class="btn">切换模式</button>
+    </fieldset>
+
+    <fieldset class="box">
+      <legend>操作</legend>
+      <button type="button" id="btnApply" class="btn primary">应用名单</button>
+      <button type="button" id="btnReload" class="btn">刷新列表</button>
+      <p id="status" class="status">准备中…</p>
+    </fieldset>
+
+    <label class="search-wrap">
+      <input type="search" id="q" placeholder="搜索名称或包名" autocomplete="off" />
+    </label>
+
+    <h2 class="h2">正在冻结 <span id="frozenCount">0</span></h2>
+    <p id="frozenEmpty" class="empty">暂无</p>
+    <div id="frozenList" class="rows"></div>
+
+    <h2 class="h2">其它应用 <span id="allCount">0</span></h2>
+    <div id="allList" class="rows compact"></div>
   </div>
-
-  <div id="status" class="status">加载中…</div>
-  <ul id="list" class="list"></ul>
-
-  <footer>
-    <span id="count">已选 0</span>
-    <button id="apply" type="button">应用</button>
-  </footer>
-
-  <script src="app.js"></script>
+  <script src="app.js?v=400"></script>
 </body>
 </html>

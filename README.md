@@ -11,16 +11,27 @@
 
 ## 行为
 
-- 勾选的应用退后台约 3 秒 → `SIGSTOP`
-- 回到前台 → `SIGCONT`
-- 黑名单空 = 空转
+WebUI 可选两种冻结模式：
 
-配置也可手改：`/data/adb/ksu-bgfreeze/blacklist.txt`  
+| 模式 | 退后台约 3 秒后 | 再用时 |
+|------|----------------|--------|
+| **SIGSTOP** | `kill -STOP` 暂停进程 | 回前台 `SIGCONT` |
+| **Hail 停用** | `am force-stop` + 整包 `pm disable`（对齐 [Hail](https://github.com/aistra0528/Hail)） | WebUI「解冻」或「打开」（enable + 启动） |
+
+停用模式下桌面图标可能消失，这是 PackageManager 整包 disable 的正常表现。  
+黑名单空 = 空转。
+
+配置：`/data/adb/ksu-bgfreeze/blacklist.txt` · 模式：`/data/adb/ksu-bgfreeze/mode`（`stop` / `disable`）  
 日志：`/data/local/tmp/ksu-bgfreeze.log`
 
-## 开发
+## 架构（v0.5+）
+
+- **Rust daemon** `module/bin/bgfreeze`（静态 aarch64 musl）：每轮 **Θ(T)** 扫 `/proc` 一次建 `uid→pids`，黑名单 **Θ(N+P)**；`flock` 单实例；Hail disable fail-fast + circuit。
+- Shell 仅 `service.sh` / `apps.sh`（WebUI）胶水。
+- Big-O：[`docs/BIG_O_ANALYSIS.md`](docs/BIG_O_ANALYSIS.md)
 
 ```bash
+./scripts/build-daemon.sh   # 需 aarch64-linux-musl 交叉链
 ./scripts/pack.sh
 ```
 
@@ -32,6 +43,7 @@
 - [docs/CLOUD_RELEASE.md](docs/CLOUD_RELEASE.md) — 云朵合规台账
 - [docs/UX.md](docs/UX.md) — WebUI 交互
 - [docs/FEASIBILITY.md](docs/FEASIBILITY.md) — 可行性说明
+- [docs/PERF_LIST.md](docs/PERF_LIST.md) — WebUI 列表大 O / 秒开策略
 
 ## 发版（CI）
 

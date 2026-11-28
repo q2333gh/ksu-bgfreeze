@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,14 +15,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 不调用 module-release dry-run：它对已发布的 versionCode 会报
-      # version-not-newer。结构校验留给这里；发版预检留给 Release workflow。
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-musl
+
+      - name: Install aarch64 musl cross linker
+        run: |
+          set -euo pipefail
+          curl -fsSL https://musl.cc/aarch64-linux-musl-cross.tgz \
+            | tar -xz -C /tmp
+          echo "CROSS_ROOT=/tmp/aarch64-linux-musl-cross" >> "$GITHUB_ENV"
+
+      - name: Build Rust daemon (static aarch64)
+        run: |
+          set -euo pipefail
+          bash scripts/build-daemon.sh
+          test -x module/bin/bgfreeze
+          file module/bin/bgfreeze | grep -E 'ARM aarch64|aarch64'
+          file module/bin/bgfreeze | grep -qi 'statically linked'
+
       - name: Validate module layout and module.yaml
         run: |
           set -euo pipefail
           test -f module.yaml
           test -f module/module.prop
           test -f README.md
+          test -x module/bin/bgfreeze
           id_prop=$(grep -E '^id=' module/module.prop | head -1 | cut -d= -f2-)
           id_yaml=$(grep -E '^id:' module.yaml | head -1 | awk '{print $2}')
           test -n "$id_prop"

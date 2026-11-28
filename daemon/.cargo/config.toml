@@ -1,0 +1,2 @@
+# Linker is set by scripts/build-daemon.sh via
+# CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER (local or CI).

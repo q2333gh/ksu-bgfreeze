@@ -1,0 +1,2 @@
+module/webroot/icons/*.png
+!module/webroot/icons/.gitkeep
