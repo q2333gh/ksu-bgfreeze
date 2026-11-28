@@ -40,25 +40,21 @@ WebUI 可选两种冻结模式：
 
 ## 文档
 
-- [AGENTS.md](AGENTS.md) — **给 Agent 的发版/操作手册**
+- [AGENTS.md](AGENTS.md) — Agent **路由表**（短）；细节见嵌套 AGENTS / `docs/` / `.cursor/skills/release`
 - [docs/CLOUD_RELEASE.md](docs/CLOUD_RELEASE.md) — 云朵合规台账
 - [docs/UX.md](docs/UX.md) — WebUI 交互
 - [docs/FEASIBILITY.md](docs/FEASIBILITY.md) — 可行性说明
 - [docs/PERF_LIST.md](docs/PERF_LIST.md) — WebUI 列表大 O / 秒开策略
 
-## 发版（CI）
+## 发版（CI，推 main 自动发）
 
-推 `v*` tag 即触发官方 `module-release` action，自动预检并以 immutable Release 发 zip：
+每次可交付改动：升 `module/module.prop` 的 `version` / `versionCode` + 写 `CHANGELOG.md`，推到 GitHub `main`。
 
-```bash
-# 先改 module/module.prop 的 version / versionCode，更新 CHANGELOG.md
-git tag v0.3.2
-git push origin v0.3.2
-```
+1. **Precheck** — 编 Rust + 打包校验  
+2. **Auto Tag** — `versionCode` 高于已发布最大值时自动打 `v*` tag  
+3. **Release** — tag 触发官方 `module-release`，发 immutable zip  
 
-也可在 Actions 里手动跑 `Release`（可勾 dry-run）。`main`/PR 上会跑结构 `Precheck`（打包 + prop/yaml 一致性）。
-
-本地只打包：`./scripts/pack.sh`
+也可在 Actions 里手动跑 `Release`（可勾 dry-run）。本地只打包：`./scripts/pack.sh`
 
 ## 上架 KernelSU Modules（云朵）
 

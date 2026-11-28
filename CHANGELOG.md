@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.2
+
+- AGENTS router: short root map + nested `daemon/`/`module/` AGENTS + `.cursor/skills/release`
+
+## v0.6.1
+
+- Dev flow: push `main` with a newer `versionCode` → Auto Tag → immutable Release (no manual tag)
+- AGENTS: every shippable change must bump version and wait for Release green
+
 ## v0.6.0
 
 - Safe-to-enable defaults: empty blacklist = idle (no dumpsys/proc); fg unknown → skip freeze
