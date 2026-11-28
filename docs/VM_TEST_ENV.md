@@ -94,10 +94,36 @@ adb connect 127.0.0.1:5555
 2. Phase 1 门闩默认关；VM 上把门闩打开压测  
 3. OP12 只装已过 VM 的版本做打开/关闭应用宝冒烟  
 
-## 7. 你回我一句即可开工
+## 7. Verified on Y9（2026-11-28 台北）
 
-准备好后回复例如：
+已由 agent 经 `pc_y9win11mcp` 装好并遥控成功：
 
-> AVD 已起，`adb devices` 有 emulator-5554，MCP 在线。
+| 项 | 值 |
+|----|-----|
+| AVD 名 | `bgfreeze-a16` |
+| 镜像 | `system-images;android-36;google_apis;x86_64`（Android 16 / API 36） |
+| SDK | `%LOCALAPPDATA%\Android\Sdk` |
+| 工作目录 | `C:\Users\12531\bgfreeze-avd\`（`start-emu.ps1`、日志） |
+| 启动 | headless：`-no-window -gpu swiftshader_indirect -no-audio` |
+| adb | `emulator-5554` → `device`；`adb root` → `uid=0` |
+| 能力抽样 | `ro.build.version.release=16`；`/dev/binder` 在；`use_freezer=true`；`/sys/fs/cgroup/apps/cgroup.freeze` 存在 |
 
-我就不会再拿 OP12 做 binder 双冻实验。
+**遥控可行**：Cloud Agent → MCP → PC `adb` → 模拟器 shell（含 root）。
+
+### 踩坑（记给下次）
+
+- `Invoke-WebRequest` 下载 Google zip 会 TLS 失败 → **用 `curl.exe -L`**
+- MCP 长任务易 `mcp_offline` → **后台 `Start-Process` + 短轮询日志**
+- `sdkmanager --licenses` 管道易卡住 → **预写 `Sdk\licenses\*` 哈希** 或 `y` 管道至「All … accepted」
+- 磁盘紧（~30–40 GB 空闲）时 `.temp` 解压可能半失败；`system.img` 齐则可继续，缺啥再补装
+
+### 复起
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\12531\bgfreeze-avd\start-emu.ps1
+# 等 boot：
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" wait-for-device
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" shell getprop sys.boot_completed   # 1
+```
+
+OP12 仍只做已绿包冒烟；破坏性探针默认走本 AVD。

@@ -56,9 +56,29 @@ bash scripts/hot-update.sh              # 打印机内完整 zip 热更步骤
 5. **机内热更**：完整 Release zip + `apps.sh hot-update`；`status` → `aligned=1`。禁只拷脚本/webroot。
 6. **生成物**：`daemon/target/` 不当源；`dist/*.zip` 可提交作产物，≠ 已发版。
 
+## Workers / 靶机
+
+| 通道 | 用途 | 状态（2026-11-28 已验） |
+|------|------|-------------------------|
+| **PC Y9 `pc_y9win11mcp`** | Android 16 AVD 宿主；L1/L2 探针与 daemon 试验 | ✅ `bgfreeze-a16`（API 36 Google APIs x86_64）；`adb -s emulator-5554` 可 root；详见 `docs/VM_TEST_ENV.md` §Verified |
+| **OP12 `phone_op12_termux`** | 发版后冒烟 / ColorOS 路径 | 仅已绿包；**禁止**破坏性双冻实验（默认） |
+| **daily_env1** | Origin→GitHub 同步 | 非 Android 靶机 |
+
+**AVD 遥控（MCP → PC）要点**：
+
+```text
+SDK = %LOCALAPPDATA%\Android\Sdk
+AVD = bgfreeze-a16
+scripts = C:\Users\12531\bgfreeze-avd\   # start-emu.ps1 / setup 日志
+adb = %LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe
+起模拟器：powershell -File C:\Users\12531\bgfreeze-avd\start-emu.ps1
+控机：adb -s emulator-5554 shell …   （MCP 长命令易掉线 → 后台脚本 + 短轮询）
+下载 SDK 包：用 curl.exe，勿用 Invoke-WebRequest（本机 TLS 易挂）
+```
+
 ## Habits
 
 - 功能改动：Rust → `daemon/` → `module/bin/bgfreeze`；胶水/WebUI → `module/`。
 - 进目录先读该目录 `AGENTS.md`（叶子只写 delta）。
 - 改发版流程：同步 `docs/workflows/ship.md` + skill `release` + 必要时 `docs/CLOUD_RELEASE.md`。
-- OP12 验证：`phone_op12_termux`；日志 `/data/local/tmp/ksu-bgfreeze.log`；空黑名单应 idle（无对单包 freeze 行）。
+- **优先 AVD** 做 cgroup/Binder 试验；OP12：`phone_op12_termux` 只冒烟；日志 `/data/local/tmp/ksu-bgfreeze.log`；空黑名单应 idle。
