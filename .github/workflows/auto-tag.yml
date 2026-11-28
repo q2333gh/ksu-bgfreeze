@@ -1,5 +1,6 @@
 # When main advances with a newer module.prop versionCode, create the matching
-# v* tag. That tag push triggers Release → immutable KernelSU module publish.
+# v* tag and dispatch Release. (GITHUB_TOKEN tag pushes do NOT trigger other
+# workflows — so we explicitly `gh workflow run Release` after tagging.)
 name: Auto Tag
 
 on:
@@ -8,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   auto-tag:
@@ -36,8 +38,6 @@ jobs:
             exit 0
           fi
 
-          # Max versionCode among published release assets named
-          # ksu-bgfreeze-<code>-v*.zip (immutable catalog).
           latest_code=$(
             gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate \
               --jq '[.[].assets[].name
@@ -55,4 +55,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "${tag}" -m "Release ${tag} (versionCode ${versionCode})"
           git push origin "refs/tags/${tag}"
-          echo "Pushed ${tag} — Release workflow will publish immutable zip"
+
+          # Tag pushes authenticated as GITHUB_TOKEN do not start other workflows.
+          gh workflow run Release.yml --ref "${tag}" -f dry_run=false
+          echo "Pushed ${tag} and dispatched Release workflow"

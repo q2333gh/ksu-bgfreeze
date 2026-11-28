@@ -29,7 +29,8 @@ bash scripts/build-daemon.sh    # 需 ANDROID_NDK_HOME 或 aarch64 musl
 bash scripts/pack.sh            # → dist/；不发版
 ```
 
-CI（GitHub）：`Precheck` → `Auto Tag`（`versionCode` 升高才打 `v*`）→ `Release`（immutable zip）。
+CI（GitHub）：`Precheck` → `Auto Tag`（升号才打 `v*`，并 `gh workflow run Release`）→ `Release`（immutable zip）。  
+注：`GITHUB_TOKEN` 推的 tag **不会**自动触发其它 workflow，故 Auto Tag 必须显式 dispatch。
 
 ## Boundaries（常驻）
 

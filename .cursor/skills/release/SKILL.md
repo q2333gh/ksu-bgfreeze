@@ -36,8 +36,9 @@ Action pin（勿随意升级）：
 4. Commit + push Origin `main`；sync same tip to GitHub `main`（`daily_env1` if needed）。
 5. Watch Actions：
    - **Precheck** green
-   - **Auto Tag** creates `vX.Y.Z`（skips if versionCode not newer — that is NOT a release）
+   - **Auto Tag** creates `vX.Y.Z` then **`gh workflow run Release`**（`GITHUB_TOKEN` 推的 tag **不会**自动触发其它 workflow，必须靠这一步）
    - **Release** green → asset `ksu-bgfreeze-N-vX.Y.Z.zip`
+   - Auto Tag skip（versionCode 未升高）≠ 已发版
 6. Verify：
 
 ```bash

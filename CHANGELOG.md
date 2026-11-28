@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.6.3
+
+- Auto Tag: after pushing `v*`, dispatch Release via `gh workflow run` (GITHUB_TOKEN tag push does not chain)
+
 ## v0.6.2
 
 - AGENTS router: short root map + nested `daemon/`/`module/` AGENTS + `.cursor/skills/release`
