@@ -1,27 +1,42 @@
-# When main advances with a newer module.prop versionCode, create the matching
-# v* tag and dispatch Release. (GITHUB_TOKEN tag pushes do NOT trigger other
-# workflows — so we explicitly `gh workflow run Release` after tagging.)
+# Fixed ship chain (do not short-circuit):
+#   push main → Precheck → (success only) → Auto Tag → Release.yml
+#
+# Why workflow_run: tagging in parallel with Precheck could ship a red build.
+# Why gh workflow run: GITHUB_TOKEN tag pushes do not start other workflows.
+# Why lightweight tags: annotated tags + workflow-touching commits → Release 403.
 name: Auto Tag
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["Precheck"]
+    types: [completed]
 
 permissions:
   contents: write
   actions: write
 
+concurrency:
+  group: ship-main-auto-tag
+  cancel-in-progress: false
+
 jobs:
   auto-tag:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Precheck SHA
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Create release tag if versionCode is newer
+      - name: Create release tag + dispatch Release
         env:
           GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           version=$(grep -E '^version=' module/module.prop | head -1 | cut -d= -f2- | tr -d '\r')
@@ -32,6 +47,8 @@ jobs:
             v*) tag="$version" ;;
             *) tag="v${version}" ;;
           esac
+
+          echo "precheck_sha=${HEAD_SHA} version=${version} versionCode=${versionCode} tag=${tag}"
 
           if git rev-parse "refs/tags/${tag}" >/dev/null 2>&1; then
             echo "Tag ${tag} already exists — skip"
@@ -44,23 +61,52 @@ jobs:
                 | capture("^ksu-bgfreeze-(?<c>[0-9]+)-")
                 | .c | tonumber] | max // 0'
           )
-          echo "prop version=${version} versionCode=${versionCode} tag=${tag} latest_released_code=${latest_code}"
+          echo "latest_released_code=${latest_code}"
 
           if [ "${versionCode}" -le "${latest_code}" ]; then
-            echo "versionCode ${versionCode} <= latest released ${latest_code} — no auto-tag (bump version+versionCode to ship)"
+            echo "versionCode ${versionCode} <= latest released ${latest_code} — no auto-tag"
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Lightweight tag so refs/tags/* points at the commit. Annotated tags
-          # point at a tag object; POST /releases with target_commitish=commit
-          # then needs workflows:write (unavailable to GITHUB_TOKEN) when the
-          # commit touches .github/workflows/.
-          git tag "${tag}"
+          git tag "${tag}" "${HEAD_SHA}"
           git push origin "refs/tags/${tag}"
 
-          # Tag pushes authenticated as GITHUB_TOKEN do not start other workflows.
-          # Workflow file is Release.yml (case-sensitive on Linux runners).
           gh workflow run Release.yml --ref "${tag}" -f dry_run=false
-          echo "Pushed ${tag} and dispatched Release workflow"
+          echo "Pushed ${tag} @ ${HEAD_SHA} and dispatched Release.yml"
+
+          # Wait until Release run for this tag finishes (fail Auto Tag if Release fails).
+          echo "Waiting for Release workflow on ${tag}…"
+          ok=0
+          for _ in $(seq 1 90); do
+            sleep 10
+            line=$(gh run list --workflow=Release.yml --branch "${tag}" --limit 5 \
+              --json databaseId,status,conclusion,event,displayTitle,headSha \
+              --jq '[.[] | select(.event=="workflow_dispatch" or .event=="push")] | .[0] // empty')
+            if [ -z "$line" ] || [ "$line" = "null" ]; then
+              echo "…no Release run yet"
+              continue
+            fi
+            status=$(printf '%s' "$line" | jq -r .status)
+            conclusion=$(printf '%s' "$line" | jq -r .conclusion)
+            rid=$(printf '%s' "$line" | jq -r .databaseId)
+            echo "Release run ${rid} status=${status} conclusion=${conclusion}"
+            if [ "$status" = "completed" ]; then
+              if [ "$conclusion" = "success" ]; then
+                ok=1
+                break
+              fi
+              echo "Release failed: conclusion=${conclusion}" >&2
+              gh run view "$rid" --log-failed || true
+              exit 1
+            fi
+          done
+          if [ "$ok" != "1" ]; then
+            echo "Timed out waiting for Release on ${tag}" >&2
+            exit 1
+          fi
+
+          gh release view "${tag}" --json tagName,isImmutable,url,assets \
+            --jq '{tag:.tagName, immutable:.isImmutable, url:.url, assets:[.assets[].name]}'
+          echo "SHIP_OK ${tag}"

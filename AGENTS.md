@@ -25,13 +25,13 @@ KernelSU 黑名单后台冻结模块。人类总览：`README.md`。
 ## Commands
 
 ```bash
-bash scripts/build-daemon.sh    # 需 ANDROID_NDK_HOME 或 aarch64 musl
-bash scripts/pack.sh            # → dist/；不发版
-bash scripts/hot-update.sh      # 打印安全热更步骤（完整 zip → apps.sh hot-update）
+bash scripts/bump-version.sh --patch   # 升号 + CHANGELOG  stub
+bash scripts/ship.sh -m "…"            # 一键：build+pack+commit+push Origin
+bash scripts/hot-update.sh             # 机内完整 zip 热更说明
 ```
 
-CI（GitHub）：`Precheck` → `Auto Tag`（升号 → lightweight `v*` → `gh workflow run Release.yml`）→ `Release`。  
-注：`GITHUB_TOKEN` 推 tag 不连锁；须显式 dispatch；用轻量 tag（annotated 易 403）。
+**固定 CI 链（GitHub）**：`Precheck` 绿 → `Auto Tag`（`workflow_run`，轻量 `v*` + `gh workflow run Release.yml`）→ `Release`（Auto Tag 等待其成功）。  
+摘要：`docs/workflows/ship.md` · runbook：skill `release`。Origin 无 `gh` → `daily_env1` 同步 GitHub `main`。
 
 ## Boundaries（常驻）
 

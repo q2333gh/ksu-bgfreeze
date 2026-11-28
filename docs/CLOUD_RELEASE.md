@@ -44,12 +44,14 @@ https://developers.kernelsu.org/docs/zh-CN/releasing
   `https://modules.kernelsu.org/api/v1/modules/ksu-bgfreeze/update.json`
 - 图标 `module.yaml` 的 `icon` 可选，当前未配。
 
-## 以后怎么发版
+## 以后怎么发版（固定一键）
 
-1. 改 `module/module.prop`：提高 `version` / `versionCode`
-2. 更新 `CHANGELOG.md`
-3. commit + push 到 GitHub `main`
-4. Actions：**Precheck** → **Auto Tag**（自动打 `v*`）→ **Release**（immutable zip）
+```bash
+bash scripts/bump-version.sh --patch
+# 编辑 CHANGELOG
+bash scripts/ship.sh -m "Release vX.Y.Z"
+# Origin → daily_env1 同步 GitHub main
+```
 
-本地只打包不发版：`./scripts/pack.sh`  
-详见 [AGENTS.md](../AGENTS.md)。
+Actions 固定链：**Precheck** 成功 → **Auto Tag** → **Release**（immutable zip）。  
+见 [workflows/ship.md](workflows/ship.md) · [AGENTS.md](../AGENTS.md)。

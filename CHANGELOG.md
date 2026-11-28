@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.7
+
+- CI 固定链：Auto Tag 仅在 Precheck 成功后运行，并等待 Release 结束
+- 一键入口：`scripts/ship.sh` / `scripts/bump-version.sh`；文档 `docs/workflows/ship.md`
+
 ## v0.6.6
 
 - Safe hot-update: `apps.sh hot-update <zip>` refuses partial packages, atomic install, clears disable/panic, verifies prop==binary
