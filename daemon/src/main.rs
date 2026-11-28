@@ -80,11 +80,17 @@ fn selfcheck() -> io::Result<()> {
     if !paths.moddir.join("module.prop").is_file() {
         return Err(io::Error::new(io::ErrorKind::NotFound, "module.prop missing"));
     }
-    // Can we read /proc?
+    println!("version={}", env!("CARGO_PKG_VERSION"));
+    println!("{}", freezer::diagnose());
     let snap = scan_procs()?;
     if snap.by_uid.is_empty() {
         return Err(io::Error::new(io::ErrorKind::Other, "empty proc snap"));
     }
+    println!("proc_uids={}", snap.by_uid.len());
+    let mode = Settings::load(&paths)?.mode;
+    println!("mode={mode:?} allow_disable={}", paths.disable_allowed());
+    let bl = read_blacklist(&paths.blacklist).unwrap_or_default();
+    println!("blacklist_n={}", bl.len());
     Ok(())
 }
 

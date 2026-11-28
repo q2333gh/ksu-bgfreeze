@@ -53,7 +53,8 @@ gh release view vX.Y.Z -R q2333gh/ksu-bgfreeze --json isImmutable,tagName,assets
 
 4. 机内热更：`apps.sh hot-update <zip>` → `status` 期望 `aligned=1`（见 `scripts/hot-update.sh`）
 
-摘要图：`docs/workflows/ship.md`。
+摘要图 / Agent 检查清单：`docs/workflows/ship.md`。  
+根路由：`AGENTS.md`；机内热更：`module/AGENTS.md`。
 
 ## Failure
 

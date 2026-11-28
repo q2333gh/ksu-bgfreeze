@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.8
+
+- Research-aligned freezer: dual cgroup path (`apps/uid_*` + AOSP `uid_*`); richer `selfcheck`
+- TOMBSTONE_PLAN: network survey + remaining S2 verify / Binder non-goals
+
 ## v0.6.7
 
 - CI 固定链：Auto Tag 仅在 Precheck 成功后运行，并等待 Release 结束

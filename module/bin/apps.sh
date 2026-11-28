@@ -578,6 +578,14 @@ case "$cmd" in
     echo OK
     ;;
   status|health) print_status ;;
+  diagnose|selfcheck)
+    if [ -x "$MODDIR/bin/bgfreeze" ]; then
+      "$MODDIR/bin/bgfreeze" selfcheck
+    else
+      echo "bgfreeze missing" >&2
+      exit 1
+    fi
+    ;;
   enable|unpanic) enable_module ;;
   hot-update|hotupdate)
     hot_update "$2"
